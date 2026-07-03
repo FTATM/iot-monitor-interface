@@ -1,0 +1,15 @@
+# Stage 1: Build the Go binary
+FROM golang:1.26-alpine AS builder
+WORKDIR /app
+COPY go.mod ./ 
+# COPY go.sum ./ (Uncomment if you have added external packages)
+RUN go mod download
+COPY . .
+RUN go build -o iot-monitor-interface-api main.go
+
+# Stage 2: Create the minimal production image
+FROM alpine:3.24
+WORKDIR /app
+COPY --from=builder /app/iot-monitor-interface-api .
+EXPOSE 8080
+CMD ["./iot-monitor-interface-api"]
