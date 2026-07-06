@@ -3,6 +3,11 @@ services:
     build: ./backend
     # We don't map ports here because only Nginx needs to talk to Go
     restart: always
+    depends_on:
+      - db
+    environment:
+      # We construct the URL here using the variables from the .env file
+      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
 
   frontend:
     build: ./frontend
@@ -11,3 +16,20 @@ services:
     depends_on:
       - backend
     restart: always
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      # Mount the init.sql file to run automatically
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # Persist database data even if the container stops
+      - postgres_data:/var/lib/postgresql
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
