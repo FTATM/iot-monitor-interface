@@ -9,36 +9,87 @@ import (
 )
 
 type WidgetHandler struct {
-	repo model.WidgetRepository
+	service model.WidgetService
 }
 
-func NewWidgetHandler(repo model.WidgetRepository) *WidgetHandler {
-	return &WidgetHandler{repo: repo}
+func NewWidgetHandler(service model.WidgetService) *WidgetHandler {
+	return &WidgetHandler{service: service}
 }
 
-func (h *WidgetHandler) GetWidgetById(w http.ResponseWriter, r *http.Request) {
-	// 1. API Logic: Parse the HTTP request
-	idStr := r.URL.Query().Get("id")
+func (h *WidgetHandler) GetById(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		http.Error(w, "invalid widget ID", http.StatusBadRequest)
 		return
 	}
 
-	// 2. Business Logic: This used to be in the Service layer
-	if id <= 0 {
-		http.Error(w, "ID must be a positive number", http.StatusBadRequest)
-		return
-	}
-
-	// 3. Data Logic: Call the Repository directly
-	widget, err := h.repo.GetById(r.Context(), id)
+	widget, err := h.service.GetWidgetDetailById(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
-	// 4. API Logic: Format the HTTP response
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(widget)
+}
+
+func (h *WidgetHandler) Create(w http.ResponseWriter, r *http.Request) {
+	var err error
+	var widgets []model.Widget
+	if err = json.NewDecoder(r.Body).Decode(&widgets); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = h.service.CreateWidgets(r.Context(), widgets)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(widgets)
+
+}
+
+func (h *WidgetHandler) Update(w http.ResponseWriter, r *http.Request) {
+	var err error
+
+	var updateWidget []model.Widget
+	if err = json.NewDecoder(r.Body).Decode(&updateWidget); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = h.service.UpdateWidget(r.Context(), updateWidget)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(updateWidget)
+}
+
+func (h *WidgetHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	var err error
+
+	var idsWidget []int
+	if err = json.NewDecoder(r.Body).Decode(&idsWidget); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = h.service.DeleteWidgets(r.Context(), idsWidget)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 }

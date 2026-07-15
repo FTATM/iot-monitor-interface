@@ -1,58 +1,53 @@
 package handler
 
-// import (
-// 	"context"
-// 	"encoding/json"
-// 	"log"
-// 	"net/http"
-// )
+import (
+	"encoding/json"
+	"net/http"
+	"strconv"
 
-// type CanvasHandler struct {
-// 	repo model.UserRepository
-// }
+	"github.com/FTATM/iot-monitor-interface/internal/model"
+)
 
-// func (app *App) saveLayout(w http.ResponseWriter, r *http.Request) {
-// 	var layout []LayoutData
+type CanvasHandler struct {
+	service model.CanvasService
+}
 
-// 	if err := json.NewDecoder(r.Body).Decode(&layout); err != nil {
-// 		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
-// 		return
-// 	}
-// 	defer r.Body.Close()
+func NewCanvasHandler(service model.CanvasService) *CanvasHandler {
+	return &CanvasHandler{service: service}
+}
 
-// 	// Convert the Go slice back into raw JSON bytes to store in PostgreSQL JSONB
-// 	layoutBytes, err := json.Marshal(layout)
-// 	if err != nil {
-// 		http.Error(w, "Failed to process layout data", http.StatusInternalServerError)
-// 		return
-// 	}
+func (h *CanvasHandler) GetDetailById(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "invalid widget ID", http.StatusBadRequest)
+		return
+	}
 
-// 	// Hardcode a user ID for this example (Normally pulled from a JWT token)
-// 	userID := "user_123"
+	canvasDetail, err := h.service.GetCanvasDetailById(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 
-// 	// Raw SQL Upsert: Insert the record. If the user_id exists, update the layout_data instead.
-// 	query := `
-// 		INSERT INTO dashboard_layouts (user_id, layout_data)
-// 		VALUES ($1, $2)
-// 		ON CONFLICT (user_id)
-// 		DO UPDATE SET
-// 			layout_data = EXCLUDED.layout_data,
-// 			updated_at = CURRENT_TIMESTAMP;
-// 	`
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(canvasDetail)
+}
 
-// 	// Execute the query using the connection pool
-// 	_, err = app.DB.Exec(context.Background(), query, userID, layoutBytes)
-// 	if err != nil {
-// 		log.Printf("Database error: %v", err)
-// 		http.Error(w, "Failed to save to database", http.StatusInternalServerError)
-// 		return
-// 	}
+func (h *CanvasHandler) GetAllByUserId(w http.ResponseWriter, r *http.Request) {
+	var err error
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
 
-// 	// Send success response
-// 	w.Header().Set("Content-Type", "application/json")
-// 	w.WriteHeader(http.StatusOK)
-// 	json.NewEncoder(w).Encode(map[string]string{
-// 		"status":  "success",
-// 		"message": "Layout saved to PostgreSQL JSONB column!",
-// 	})
-// }
+	canvas, err := h.service.GetAllCanvasByUserId(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(canvas)
+
+}

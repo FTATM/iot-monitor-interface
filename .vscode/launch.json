@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Backend",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/backend/cmd/server",    // Tells VS Code to build the Go files in the backend folder
+            "cwd": "${workspaceFolder}/backend",        // Makes sure the app runs as if you are inside the backend folder
+            "envFile": "${workspaceFolder}/.env"        // MAGIC BULLET: Loads the root .env file automatically!
+        }
+    ]
+}
