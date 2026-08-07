@@ -2,10 +2,7 @@ package repo
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/FTATM/iot-monitor-interface/internal/model"
 	"github.com/jackc/pgx/v5"
@@ -13,130 +10,139 @@ import (
 )
 
 type widgetRepo struct {
-	pool DBTX
+	pool        DBTX
+	prefixError string
 }
 
-// NewUserRepository creates a new repository instance
 func NewWidgetRepository(pool *pgxpool.Pool) model.WidgetRepository {
-	return &widgetRepo{pool: pool}
+	return &widgetRepo{pool: pool, prefixError: "widgetRepo"}
 }
 
 func (r *widgetRepo) db(ctx context.Context) DBTX {
 	if tx := extractTx(ctx); tx != nil {
-		return tx // Found a transaction in the context!
+		return tx
 	}
-	return r.pool // No transaction, use standard pool
+	return r.pool
 }
 
 func (r *widgetRepo) GetById(ctx context.Context, id int) (*model.Widget, error) {
+	const fname = "GetById"
 	widget := &model.Widget{}
-	query := "SELECT widget_id, widget_type_id , layout_data FROM widget WHERE widget_id = $1"
+	query := "SELECT widget_id, widget_type_id, layout_data, widget_label FROM widget WHERE widget_id = $1"
 	err := r.db(ctx).QueryRow(ctx, query, id).Scan(&widget.WidgetId, &widget.WidgetTypeId, &widget.LayoutData)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("widget not found")
-		}
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 	return widget, nil
 }
 
 func (r *widgetRepo) Create(ctx context.Context, widgets []model.Widget) error {
+	const fname = "Create"
 	if len(widgets) == 0 {
 		return nil
 	}
 
-	var values []any
-	var placeholders []string
+	batch := &pgx.Batch{}
+	query := `
+        INSERT INTO widget (
+            widget_type_id,
+			canvas_id,
+			device_id,
+			widget_label,
+    		layout_data,
+			widget_color,
+			custom_chart_data
+        ) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7) 
+        RETURNING widget_id`
 
-	for i, widget := range widgets {
-
-		rowValues := []any{
+	// 1. Queue all the queries
+	for _, widget := range widgets {
+		batch.Queue(
+			query,
 			widget.WidgetTypeId,
 			widget.CanvasId,
+			widget.DeviceId,
+			widget.WidgetLabel,
 			widget.LayoutData,
-		}
-
-		numCols := len(rowValues)
-		var rowPlaceholders []string
-
-		for j := 0; j < numCols; j++ {
-			paramIndex := (i * numCols) + j + 1
-			rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("$%d", paramIndex))
-		}
-
-		rowString := fmt.Sprintf("(%s)", strings.Join(rowPlaceholders, ", "))
-		placeholders = append(placeholders, rowString)
-
-		values = append(values, rowValues...)
+			widget.WidgetColor,
+			widget.CustomChartData,
+		)
 	}
 
-	query := fmt.Sprintf(
-		`INSERT INTO widget (widget_type_id, canvas_id, layout_data) VALUES %s RETURNING widget_id`,
-		strings.Join(placeholders, ", "),
-	)
-	rows, err := r.db(ctx).Query(ctx, query, values...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
+	// 2. Send the batch in one network trip
+	br := r.db(ctx).SendBatch(ctx, batch)
+	defer br.Close() // Ensure the batch is closed
 
-	i := 0
-	for rows.Next() {
-		if err := rows.Scan(&widgets[i].WidgetId); err != nil {
-			return err
+	// 3. Read the returned IDs in the exact same order
+	for i := range widgets {
+		err := br.QueryRow().Scan(&widgets[i].WidgetId)
+		if err != nil {
+			return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 		}
-		i++
 	}
 
-	return rows.Err()
+	return nil
 }
 
 func (r *widgetRepo) Update(ctx context.Context, widgets []model.Widget) error {
+	const fname = "Update"
 	if len(widgets) == 0 {
 		return nil
 	}
 
-	// 1. Create slices to hold the columns of data we want to update
-	var ids []int
-	var typeIDs []int
-	var layouts []string // Using string is the safest way to pass JSONB arrays to Postgres
+	batch := &pgx.Batch{}
+	query := `
+        UPDATE widget 
+        SET 
+            widget_type_id = $1,
+            canvas_id = $2,
+            device_id = $3,
+            widget_label = $4,
+            layout_data = $5,
+            widget_color = $6,
+            custom_chart_data = $7
+        WHERE widget_id = $8`
 
-	// 2. Populate the slices from our structs
+	// 1. Queue all the individual update statements
 	for _, w := range widgets {
-		ids = append(ids, w.WidgetId)
-		typeIDs = append(typeIDs, w.WidgetTypeId)
+		batch.Queue(query,
+			w.WidgetTypeId,
+			w.CanvasId,
+			w.DeviceId,
+			w.WidgetLabel,
+			w.LayoutData,
+			w.WidgetColor,
+			w.CustomChartData,
+			w.WidgetId,
+		)
+	}
 
-		layoutBytes, err := json.Marshal(w.LayoutData)
+	// 2. Send to the database
+	br := r.db(ctx).SendBatch(ctx, batch)
+	defer br.Close()
+
+	// 3. Verify that every update actually affected a row
+	var totalRowsAffected int64
+	for range widgets {
+		tag, err := br.Exec() // Exec is used instead of QueryRow for updates
 		if err != nil {
-			return err
+			return fmt.Errorf("[%s]>[%s] execute error: %w", r.prefixError, fname, err)
 		}
-		layouts = append(layouts, string(layoutBytes))
+		totalRowsAffected += tag.RowsAffected()
 	}
 
-	query := `UPDATE widget AS w
-		SET 
-			widget_type_id = u.widget_type_id,
-			layout_data = u.layout_data,
-			updated_at = CURRENT_TIMESTAMP
-		FROM UNNEST($1::int[], $2::int[], $3::jsonb[]) AS u(widget_id, widget_type_id, layout_data)
-		WHERE w.widget_id = u.widget_id`
-
-	result, err := r.db(ctx).Exec(ctx, query, ids, typeIDs, layouts)
-
-	if err != nil {
-		return err
-	}
-
-	if result.RowsAffected() != int64(len(ids)) {
-		return fmt.Errorf("update row affected not match")
+	if totalRowsAffected != int64(len(widgets)) {
+		return fmt.Errorf("[%s]>[%s]: update row affected not match (expected %d, got %d)",
+			r.prefixError, fname, len(widgets), totalRowsAffected)
 	}
 
 	return nil
 }
 
 func (r *widgetRepo) Delete(ctx context.Context, ids []int) error {
+	const fname = "Delete"
 	if len(ids) == 0 {
 		return nil
 	}
@@ -145,41 +151,38 @@ func (r *widgetRepo) Delete(ctx context.Context, ids []int) error {
 
 	result, err := r.db(ctx).Exec(ctx, query, ids)
 	if err != nil {
-		return err
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 
 	if result.RowsAffected() != int64(len(ids)) {
-		return fmt.Errorf("attempted to delete %d widgets, but only found and deleted %d", len(ids), result.RowsAffected())
+		return fmt.Errorf("[%s]>[%s]: attempted to delete %d widgets, but only found and deleted %d", r.prefixError, fname, len(ids), result.RowsAffected())
 	}
 
 	return nil
 }
 
-func (r *widgetRepo) GetWidgetByCanvasId(ctx context.Context, canvasId int) ([]model.Widget, error) {
-	query := "SELECT widget_id, widget_type_id, canvas_id, layout_data FROM widget WHERE canvas_id = $1"
+func (r *widgetRepo) GetWidgetByCanvasId(ctx context.Context, canvasId []int) ([]model.Widget, error) {
+	const fname = "GetWidgetByCanvasId"
+	query := `
+	SELECT 
+		widget_id,
+		widget_type_id,
+		widget_label,
+		canvas_id,
+		layout_data,
+		widget_color,
+		custom_chart_data
+	FROM widget 
+	WHERE canvas_id = ANY($1)
+	`
 	rows, err := r.db(ctx).Query(ctx, query, canvasId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 
 	widgets, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.Widget])
 	if err != nil {
-		return nil, err
-	}
-
-	return widgets, nil
-}
-
-func (r *widgetRepo) GetWidgetByCanvasIds(ctx context.Context, canvasId []int) ([]model.Widget, error) {
-	query := "SELECT widget_id, widget_type_id, canvas_id, layout_data FROM widget WHERE canvas_id = ANY($1)"
-	rows, err := r.db(ctx).Query(ctx, query, canvasId)
-	if err != nil {
-		return nil, err
-	}
-
-	widgets, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.Widget])
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 
 	return widgets, nil

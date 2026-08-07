@@ -1,153 +1,154 @@
 <template>
-  <div class="app-wrapper">
-    <!-- Sticky Top Header -->
-    <header class="top-header">
-      <div class="header-left">
-        <button class="menu-toggle" @click="toggleSidebar">☰</button>
-        
-        <!-- Header Link to Dashboard -->
-        <router-link to="/" class="logo">My App</router-link>
+  <div class="flex flex-col h-screen overflow-hidden bg-base-200">
+
+    <!-- Header (Always visible, always clickable) -->
+    <!-- Removed drawer-button from here, it's just a standard label now -->
+    <header class="navbar bg-neutral text-neutral-content sticky top-0 z-[100] px-4 shadow-md h-[60px]">
+      <div class="flex-1 gap-2">
+        <!-- Hamburger Button -->
+        <label for="main-drawer" class="btn btn-square btn-ghost cursor-pointer text-white hover:bg-white/20">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            class="inline-block w-6 h-6 stroke-current">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+        </label>
+        <router-link to="/" class="btn btn-ghost text-2xl font-bold normal-case text-white hover:bg-white/20">
+          DashBoard
+        </router-link>
       </div>
-      <div class="user-profile">Admin</div>
+
+      <!-- User Profile and Logout -->
+      <div class="flex-none flex items-center gap-4">
+        <div class="text-lg font-medium flex items-center gap-2">
+          <span>👤</span>
+          <span>{{ userStore.user.fullName || "User" }}</span>
+        </div>
+        <button @click="handleLogout" class="btn btn-outline btn-error btn-base transition-transform hover:scale-105">
+          Log Out
+        </button>
+      </div>
     </header>
 
-    <div class="main-body">
-      <!-- Sidebar Navigation -->
-      <aside class="sidebar" :class="{ 'is-hidden': !isSidebarOpen }">
-        <nav>
-          <!-- Sidebar Links (active-class automatically applies when on that route) -->
-          <router-link to="/" class="nav-item" active-class="active">Dashboard</router-link>
-          <router-link to="/about" class="nav-item" active-class="active">About</router-link>
-        </nav>
-      </aside>
+    <!-- Container for Drawer (Locks the sidebar to this area only) -->
+    <!-- Added 'relative' so the absolute sidebar stays contained here -->
+    <div class="drawer flex-1 relative overflow-hidden">
 
-      <!-- Dynamic Content Area -->
-      <main class="content-area">
-        <slot /> 
+      <input id="main-drawer" type="checkbox" class="drawer-toggle" v-model="isSidebarOpen" />
+
+      <main class="drawer-content flex flex-col h-full bg-base-200 p-6 overflow-y-auto w-full">
+        <!-- Dynamic Content Area -->
+        <slot />
       </main>
+
+      <!-- Sidebar Navigation -->
+      <!-- FIXED: Added 'absolute' to override DaisyUI's fixed fullscreen layout -->
+      <aside class="drawer-side absolute z-50 h-full">
+        <label for="main-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+
+        <!-- DaisyUI Menu -->
+        <ul
+          class="menu p-4 w-[250px] min-h-full bg-base-100 text-base-content border-r border-base-200 text-lg font-medium">
+          <li>
+            <router-link :to="{ name: 'dashboard' }" active-class="!text-orange-600 !bg-orange-100 font-bold"
+              @click="isSidebarOpen = false">
+              Dashboard
+            </router-link>
+          </li>
+          <li v-if="hasPermission('Canvas Design', 'Display') || hasPermission('Canvas Access', 'Display')">
+            <details>
+              <summary>Canvas Management</summary>
+              <ul>
+                <li v-if="hasPermission('Canvas Design', 'Display')">
+                  <router-link :to="{ name: 'canvasDesign' }" active-class="!text-orange-600 !bg-orange-100 font-bold"
+                    @click="isSidebarOpen = false">
+                    Design
+                  </router-link>
+                </li>
+                <li v-if="hasPermission('Canvas Access', 'Display')">
+                  <router-link :to="{ name: 'canvasAccess' }" active-class="!text-orange-600 !bg-orange-100 font-bold"
+                    @click="isSidebarOpen = false">
+                    Access
+                  </router-link>
+                </li>
+              </ul>
+            </details>
+          </li>
+          <li>
+            <router-link :to="{ name: 'about' }" active-class="!text-orange-600 !bg-orange-100 font-bold"
+              @click="isSidebarOpen = false">
+              About
+            </router-link>
+          </li>
+          <li v-if="hasPermission('Scheduler', 'Display')">
+            <router-link :to="{ name: 'scheduler' }" active-class="!text-orange-600 !bg-orange-100 font-bold"
+              @click="isSidebarOpen = false">
+              Scheduler
+            </router-link>
+          </li>
+
+          <!-- Setting Parent -->
+          <li
+            v-if="hasPermission('User', 'Display') || hasPermission('Role', 'Display') || hasPermission('Device', 'Display')">
+            <details>
+              <summary>Management</summary>
+              <ul>
+                <li v-if="hasPermission('User', 'Display')">
+                  <router-link :to="{ name: 'user' }" active-class="!text-orange-600 !bg-orange-100 font-bold"
+                    @click="isSidebarOpen = false">
+                    User
+                  </router-link>
+                </li>
+                <li v-if="hasPermission('Role', 'Display')">
+                  <router-link :to="{ name: 'role' }" active-class="!text-orange-600 !bg-orange-100 font-bold"
+                    @click="isSidebarOpen = false">
+                    Role
+                  </router-link>
+                </li>
+                <li v-if="hasPermission('Device', 'Display')">
+                  <router-link :to="{ name: 'device' }" active-class="!text-orange-600 !bg-orange-100 font-bold"
+                    @click="isSidebarOpen = false">
+                    Device
+                  </router-link>
+                </li>
+              </ul>
+            </details>
+          </li>
+        </ul>
+      </aside>
     </div>
+
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { useMutation } from '@/composables/useMutation';
+import { usePermissionStore } from '@/stores/usePermissionStore';
+import { useUserStore } from '@/stores/useUserStore';
 
-// State to track if the sidebar is open or closed
-// Let's set it to false by default so it starts hidden, or true if you prefer!
+// --- STATE ---
 const isSidebarOpen = ref(false);
 
-const toggleSidebar = () => {
-  isSidebarOpen.value = !isSidebarOpen.value;
+const router = useRouter();
+
+// --- STORE ---
+const permissionStore = usePermissionStore();
+const { hasPermission } = permissionStore;
+const userStore = useUserStore();
+const { setUser } = userStore;
+
+const { res: logoutRes, execute: logoutApi } = useMutation();
+
+const handleLogout = async () => {
+  await logoutApi('/user/logout', null, 'POST');
+
+  if (!logoutRes.value.ok) {
+    // Fixed reference error (previously logged undefined 'error' variable)
+    console.error("Logout failed. Response not OK.");
+  } else {
+    setUser(null)
+    router.push('/login');
+  }
 };
 </script>
-
-<style scoped>
-/* App Wrapper */
-.app-wrapper {
-  display: flex;
-  flex-direction: column;
-  height: 100vh; 
-  overflow: hidden;
-}
-
-/* Header Styles */
-.top-header {
-  height: 60px;
-  background-color: #1e293b;
-  color: white;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 20px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.menu-toggle {
-  background: transparent;
-  border: none;
-  color: white;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.menu-toggle:hover {
-  background-color: #334155;
-}
-
-.logo {
-  font-weight: bold;
-  font-size: 1.2rem;
-  text-decoration: none; 
-  color: white;
-}
-
-/* Main Body Container */
-.main-body {
-  display: flex;
-  flex: 1; 
-  overflow: hidden; 
-  position: relative; /* CRITICAL: This allows the absolute sidebar to position itself relative to this container */
-}
-
-/* Sidebar overlaying the content */
-.sidebar {
-  position: absolute; /* CRITICAL: Takes it out of document flow so it doesn't push content */
-  top: 0;
-  bottom: 0; /* Stretches it to the bottom of the main-body */
-  left: 0;
-  z-index: 50; /* Ensures it sits on top of the dashboard content */
-  
-  width: 250px;
-  background-color: #f8fafc;
-  border-right: 1px solid #e2e8f0;
-  padding: 20px 0;
-  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1); /* Adds a nice shadow over the content */
-  
-  /* Smoothly translates its X position */
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  
-  overflow-y: auto;
-}
-
-/* Hidden state moves the sidebar 100% of its width to the left (off-screen) */
-.sidebar.is-hidden {
-  transform: translateX(-100%);
-}
-
-/* Nav Items */
-.nav-item {
-  display: block;
-  padding: 12px 20px;
-  color: #334155;
-  text-decoration: none;
-  font-weight: 500;
-}
-
-.nav-item:hover, .nav-item.active {
-  background-color: #e2e8f0;
-  color: #0f172a;
-}
-
-/* Content Area */
-.content-area {
-  flex: 1; 
-  background-color: #f1f5f9;
-  padding: 24px;
-  overflow-y: auto; 
-  width: 100%; /* Ensures content stays full width behind the sidebar */
-}
-</style>

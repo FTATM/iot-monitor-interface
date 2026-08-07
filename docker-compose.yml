@@ -1,22 +1,47 @@
 services:
-  backend:
-    build: ./backend
+  server-api:
+    build: 
+      context: ./backend
+      dockerfile: cmd/api/Dockerfile 
+      args:
+        SERVER_PORT: "${SERVER_API_PORT:?error: server-api port not set}"
     # We don't map ports here because only Nginx needs to talk to Go
-    restart: always
+    restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       - DB_HOST=db
-
+    volumes:
+      # host_machine_folder : container_folder
+      - ./backend/local_logs/api:/app/logs
+  server-schedule-engine:
+    build:
+      context: ./backend
+      dockerfile: cmd/schedule_engine/Dockerfile
+      args:
+        SERVER_PORT: "${SERVER_SCHEDULE_ENGINE_PORT:?error: server-schedule-engine port not set}"
+    restart: unless-stopped
+    depends_on:
+      - db
+      - server-api
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+    volumes:
+      # host_machine_folder : container_folder
+      - ./backend/local_logs/schedule:/app/logs
   frontend:
     build: ./frontend
     ports:
       - "80:80" # Maps port 80 on your host machine to port 80 in the container
     depends_on:
-      - backend
-    restart: always
+      - server-api
+    restart: unless-stopped
+    
   db:
     image: postgres:18.4-alpine
     environment:
@@ -28,9 +53,15 @@ services:
     volumes:
       # Mount the init.sql file to run automatically
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database/preload.sql:/docker-entrypoint-initdb.d/preload.sql
       # Persist database data even if the container stops
       - postgres_data:/var/lib/postgresql
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

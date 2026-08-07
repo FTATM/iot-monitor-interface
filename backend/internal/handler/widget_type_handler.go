@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -17,33 +17,41 @@ func NewWidgetTypeHandler(service model.WidgetTypeService) *WidgetTypeHandler {
 }
 
 func (h *WidgetTypeHandler) GetById(w http.ResponseWriter, r *http.Request) {
+	var res Response
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, "invalid widget ID", http.StatusBadRequest)
+		res.Message = "invalid widget ID"
+		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
 
 	widgetType, err := h.service.GetWidgetTypeById(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		res.Message = "Error"
+		slog.ErrorContext(r.Context(), res.Message,
+			slog.String("track", err.Error()),
+		)
+		respondJson(w, http.StatusInternalServerError, &res)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(widgetType)
+	res.Data = widgetType
+	respondJson(w, http.StatusOK, &res)
 }
 
 func (h *WidgetTypeHandler) GetAll(w http.ResponseWriter, r *http.Request) {
-
+	var res Response
 	widgetTypes, err := h.service.GetWidgetTypeAll(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		res.Message = "Error"
+		slog.ErrorContext(r.Context(), res.Message,
+			slog.String("track", err.Error()),
+		)
+		respondJson(w, http.StatusInternalServerError, &res)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(widgetTypes)
+	res.Data = widgetTypes
+	respondJson(w, http.StatusOK, &res)
 }

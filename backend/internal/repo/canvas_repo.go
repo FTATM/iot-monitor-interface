@@ -2,7 +2,7 @@ package repo
 
 import (
 	"context"
-	"errors"
+	"fmt"
 
 	"github.com/FTATM/iot-monitor-interface/internal/model"
 	"github.com/jackc/pgx/v5"
@@ -10,46 +10,227 @@ import (
 )
 
 type canvasRepo struct {
-	pool DBTX
+	pool        DBTX
+	prefixError string
 }
 
-// NewUserRepository creates a new repository instance
 func NewCanvasRepository(pool *pgxpool.Pool) model.CanvasRepository {
-	return &canvasRepo{pool: pool}
+	return &canvasRepo{pool: pool, prefixError: "canvasRepo"}
 }
 
 func (r *canvasRepo) db(ctx context.Context) DBTX {
 	if tx := extractTx(ctx); tx != nil {
-		return tx // Found a transaction in the context!
+		return tx
 	}
-	return r.pool // No transaction, use standard pool
+	return r.pool
+}
+
+func (r *canvasRepo) GetAll(ctx context.Context, active bool) ([]model.Canvas, error) {
+	const fname = "GetAll"
+	query := `
+		SELECT 
+			canvas_id, 
+			canvas_name 
+		FROM canvas 
+		WHERE ($1 = false) OR ($1 = true AND deleted_at IS NULL)
+		`
+	rows, err := r.db(ctx).Query(ctx, query, active)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	canvasList, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.Canvas])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return canvasList, nil
 }
 
 func (r *canvasRepo) GetById(ctx context.Context, id int) (*model.Canvas, error) {
+	const fname = "GetById"
 	canvas := &model.Canvas{}
 	query := "SELECT canvas_id FROM canvas WHERE canvas_id = $1"
 	err := r.db(ctx).QueryRow(ctx, query, id).Scan(&canvas.CanvasId)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("canvas not found")
-		}
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 	return canvas, nil
 }
 
 func (r *canvasRepo) GetByIds(ctx context.Context, ids []int) ([]model.Canvas, error) {
+	const fname = "GetByIds"
 	query := "SELECT canvas_id, canvas_name FROM canvas WHERE canvas_id = ANY($1)"
 	rows, err := r.db(ctx).Query(ctx, query, ids)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 
 	canvasList, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.Canvas])
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 
 	return canvasList, nil
+}
+
+func (r *canvasRepo) GetCanvasByUserId(ctx context.Context, userId int, active bool) ([]model.Canvas, error) {
+	const fname = "GetCanvasByUserId"
+	query := `
+		SELECT 
+			c.canvas_id,
+			c.canvas_name
+		FROM "user" u
+		JOIN canvas_role cr on cr.role_id = u.role_id
+		JOIN canvas c on cr.canvas_id = c.canvas_id
+		WHERE 
+			u.user_id = $1 AND
+			(($2 = false) OR ($2 = true AND c.deleted_at IS NULL))
+	`
+	rows, err := r.db(ctx).Query(ctx, query, userId, active)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	canvasResult, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.Canvas])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return canvasResult, nil
+}
+
+func (r *canvasRepo) GetCanvasByRoleId(ctx context.Context, roleId int, active bool) ([]model.Canvas, error) {
+	const fname = "GetCanvasByRoleId"
+	query := `
+		SELECT 
+			c.canvas_id,
+			c.canvas_name
+		FROM canvas_role cr
+		JOIN canvas c on cr.canvas_id = c.canvas_id
+		WHERE 
+			cr.role_id = $1 AND
+			(($2 = false) OR ($2 = true AND c.deleted_at IS NULL))
+	`
+	rows, err := r.db(ctx).Query(ctx, query, roleId, active)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	canvasResult, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.Canvas])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return canvasResult, nil
+}
+
+func (r *canvasRepo) GetAllCanvasRole(ctx context.Context) ([]model.CanvasRole, error) {
+	const fname = "GetAllCanvasRole"
+	query := `
+		SELECT 
+			cr.canvas_id,
+			cr.role_id
+		FROM canvas_role cr
+	`
+	rows, err := r.db(ctx).Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	canvasResult, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.CanvasRole])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return canvasResult, nil
+}
+
+func (r *canvasRepo) GetCanvasRoleByRoleId(ctx context.Context, roleId int) ([]int, error) {
+	const fname = "GetAllCanvasRole"
+	query := `
+		SELECT 
+			canvas_id
+		FROM canvas_role
+		WHERE role_id = $1
+	`
+	rows, err := r.db(ctx).Query(ctx, query, roleId)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	canvasIds, err := pgx.CollectRows(rows, pgx.RowTo[int])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return canvasIds, nil
+}
+func (r *canvasRepo) CreateCanvasRole(ctx context.Context, canvasroles []model.CanvasRole) error {
+	const fname = "CreateCanvasRole"
+	if len(canvasroles) == 0 {
+		return nil
+	}
+
+	batch := &pgx.Batch{}
+	query := `
+        INSERT INTO canvas_role (
+			role_id,
+			canvas_id
+        ) 
+        VALUES ($1, $2) 
+		`
+
+	for _, canvasRole := range canvasroles {
+		batch.Queue(
+			query,
+			canvasRole.RoleId,
+			canvasRole.CanvasId,
+		)
+	}
+
+	br := r.db(ctx).SendBatch(ctx, batch)
+	defer br.Close()
+
+	// br.Exec() returns the command tag (rows affected) and an error
+	for range canvasroles {
+		_, err := br.Exec()
+		if err != nil {
+			return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+		}
+	}
+
+	return nil
+}
+func (r *canvasRepo) DeleteCanvasRole(ctx context.Context, canvasroles []model.CanvasRole) error {
+	const fname = "DeleteCanvasRole"
+	if len(canvasroles) == 0 {
+		return nil
+	}
+
+	batch := &pgx.Batch{}
+	query := `
+        DELETE FROM canvas_role WHERE role_id = $1 AND canvas_id = $2	
+		`
+
+	for _, canvasRole := range canvasroles {
+		batch.Queue(
+			query,
+			canvasRole.RoleId,
+			canvasRole.CanvasId,
+		)
+	}
+
+	br := r.db(ctx).SendBatch(ctx, batch)
+	defer br.Close()
+
+	for range canvasroles {
+		_, err := br.Exec()
+		if err != nil {
+			return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+		}
+	}
+
+	return nil
 }

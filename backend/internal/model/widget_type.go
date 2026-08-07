@@ -8,7 +8,7 @@ import (
 type WidgetType struct {
 	WidgetTypeId   int       `json:"widgetTypeId" db:"widget_type_id"`
 	WidgetTypeName string    `json:"widgetTypeName" db:"widget_type_name"`
-	CreatedAt      time.Time `json:"createAt" db:"created_at"`
+	CreatedAt      time.Time `json:"-" db:"created_at"`
 }
 
 type WidgetTypeRepository interface {

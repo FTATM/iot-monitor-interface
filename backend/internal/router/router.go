@@ -1,33 +1,38 @@
 package router
 
 import (
-	"log"
 	"net/http"
-	"time"
 
 	"github.com/FTATM/iot-monitor-interface/internal/handler"
-	"github.com/golang-jwt/jwt/v5"
 )
 
-// AllHandlers bundles everything together so Setup() stays clean
-type AllHandlers struct {
-	Widget     *handler.WidgetHandler
-	Canvas     *handler.CanvasHandler
-	WidgetType *handler.WidgetTypeHandler
-	User       *handler.UserHandler
+// ApiHandlers bundles everything together so Setup() stays clean
+type ApiHandlers struct {
+	Widget         *handler.WidgetHandler
+	Canvas         *handler.CanvasHandler
+	WidgetType     *handler.WidgetTypeHandler
+	User           *handler.UserHandler
+	Device         *handler.DeviceHandler
+	Schedule       *handler.ScheduleHandler
+	ScheduleEngine *handler.ScheduleEngineHandler
+	Role           *handler.RoleHandler
 	// Add more as the app grows...
 }
 
-// Setup now takes the bundle and applies middleware
-func Setup(handlers AllHandlers) *http.ServeMux {
+// SetupApi now takes the bundle and applies middleware
+func SetupApi(handlers ApiHandlers) *http.ServeMux {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /ping", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		w.WriteHeader(http.StatusOK)
+	})
 
 	widgetMux := http.NewServeMux()
 	mux.Handle("/widget/", http.StripPrefix("/widget", widgetMux))
 	widgetMux.HandleFunc("GET /getbyid/{id}", handlers.Widget.GetById)
-	widgetMux.HandleFunc("POST /create", handlers.Widget.Create)
-	widgetMux.HandleFunc("PUT /update", handlers.Widget.Update)
-	widgetMux.HandleFunc("DELETE /delete", handlers.Widget.Delete)
+	widgetMux.HandleFunc("POST /upsert", handlers.Widget.Upsert)
 
 	widgetTypeMux := http.NewServeMux()
 	mux.Handle("/widgettype/", http.StripPrefix("/widgettype", widgetTypeMux))
@@ -36,61 +41,55 @@ func Setup(handlers AllHandlers) *http.ServeMux {
 
 	canvasMux := http.NewServeMux()
 	mux.Handle("/canvas/", http.StripPrefix("/canvas", canvasMux))
+	canvasMux.HandleFunc("GET /getall", handlers.Canvas.GetAll)
 	canvasMux.HandleFunc("GET /getdetailbyid/{id}", handlers.Canvas.GetDetailById)
-	canvasMux.HandleFunc("GET /getallbyuserid/{id}", handlers.Canvas.GetAllByUserId)
+	canvasMux.HandleFunc("GET /getalldetailbyuser", handlers.Canvas.GetAllDetailByUser)
+	canvasMux.HandleFunc("GET /getallcanvasroledetail", handlers.Canvas.GetAllCanvasRoleDetail)
+	canvasMux.HandleFunc("POST /upsertcanvasrole", handlers.Canvas.UpsertCanvasRole)
 
 	userMux := http.NewServeMux()
 	mux.Handle("/user/", http.StripPrefix("/user", userMux))
 	userMux.HandleFunc("POST /create", handlers.User.Create)
+	userMux.HandleFunc("PUT /update", handlers.User.Update)
+	userMux.HandleFunc("DELETE /delete/{id}", handlers.User.Delete)
 	userMux.HandleFunc("POST /login", handlers.User.Login)
+	userMux.HandleFunc("POST /logout", handlers.User.Logout)
+	userMux.HandleFunc("GET /getalldetail", handlers.User.GetAllDetail)
+	userMux.HandleFunc("GET /permission", handlers.User.Permission)
+
+	deviceMux := http.NewServeMux()
+	mux.Handle("/device/", http.StripPrefix("/device", deviceMux))
+	deviceMux.HandleFunc("GET /getalldetail", handlers.Device.GetAllDetail)
+	deviceMux.HandleFunc("POST /create", handlers.Device.Create)
+	deviceMux.HandleFunc("PUT /update", handlers.Device.Update)
+	deviceMux.HandleFunc("DELETE /delete/{id}", handlers.Device.Delete)
+
+	scheduleMux := http.NewServeMux()
+	mux.Handle("/schedule/", http.StripPrefix("/schedule", scheduleMux))
+	scheduleMux.HandleFunc("GET /getalldetail", handlers.Schedule.GetAllDetail)
+	scheduleMux.HandleFunc("POST /create", handlers.Schedule.Create)
+	scheduleMux.HandleFunc("PUT /update", handlers.Schedule.Update)
+
+	roleMux := http.NewServeMux()
+	mux.Handle("/role/", http.StripPrefix("/role", roleMux))
+	roleMux.HandleFunc("GET /getall", handlers.Role.GetAll)
+	roleMux.HandleFunc("GET /getmenuavailable", handlers.Role.GetMenuAvailable)
+	roleMux.HandleFunc("GET /getdetailbyid/{id}", handlers.Role.GetDetailById)
+	roleMux.HandleFunc("POST /upsert", handlers.Role.Upsert)
 
 	return mux
 }
 
-// LoggingMiddleware is a standard way to wrap handlers in Go
-func LoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("%s %s %v", r.Method, r.URL.Path, time.Since(start))
-	})
-}
+func SetupSchedule(handlers ApiHandlers) *http.ServeMux {
+	mux := http.NewServeMux()
 
-// AuthMiddleware intercepts the request and checks the token
-func AuthMiddleware(jwtKey []byte, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	scheduleEngine := http.NewServeMux()
+	// 1. Change the base prefix to match the client
+	mux.Handle("/scheduleengine/", http.StripPrefix("/scheduleengine", scheduleEngine))
 
-		// Public route
-		if r.URL.Path == "/user/login" {
-			next.ServeHTTP(w, r)
-			return
-		}
+	// 2. Adjust the remaining path to place {id} before /sync
+	scheduleEngine.HandleFunc("POST /{id}/sync", handlers.ScheduleEngine.SyncSchedule)
+	scheduleEngine.HandleFunc("DELETE /{id}/sync", handlers.ScheduleEngine.UnsyncSchedule)
 
-		cookie, err := r.Cookie("authToken")
-		if err != nil {
-			// If there is no cookie, they are not logged in
-			http.Error(w, "Unauthorized: Missing cookie", http.StatusUnauthorized)
-			return
-		}
-
-		// Extract the raw JWT string from the cookie
-		tokenString := cookie.Value
-
-		// Parse and validate the token using the injected key
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
-			// Ensure the signing method is what you expect
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, http.ErrAbortHandler
-			}
-			return jwtKey, nil // Return the key to the parser
-		})
-
-		if err != nil || !token.Valid {
-			http.Error(w, "Unauthorized: Invalid Token", http.StatusUnauthorized)
-			return
-		}
-
-		// If valid, let the request pass through to the Handler
-		next.ServeHTTP(w, r)
-	})
+	return mux
 }

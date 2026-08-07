@@ -12,7 +12,8 @@ export const fetchWithAuth = async (url, options = {}) => {
   })
 
   if (response.status === 401) {
-    // If the backend says the cookie is expired or invalid, send them to login
+    localStorage.removeItem('userId')
+    localStorage.removeItem('userName')
     window.location.href = '/login'
     throw new Error('Session expired. Please log in again.')
   }

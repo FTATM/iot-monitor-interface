@@ -2,7 +2,7 @@ package repo
 
 import (
 	"context"
-	"errors"
+	"fmt"
 
 	"github.com/FTATM/iot-monitor-interface/internal/model"
 	"github.com/jackc/pgx/v5"
@@ -10,98 +10,194 @@ import (
 )
 
 type userRepo struct {
-	pool DBTX
+	pool        DBTX
+	prefixError string
 }
 
-// NewUserRepository creates a new repository instance
 func NewUserRepository(pool *pgxpool.Pool) model.UserRepository {
-	return &userRepo{pool: pool}
+	return &userRepo{pool: pool, prefixError: "userRepo"}
 }
 
 func (r *userRepo) db(ctx context.Context) DBTX {
 	if tx := extractTx(ctx); tx != nil {
-		return tx // Found a transaction in the context!
+		return tx
 	}
-	return r.pool // No transaction, use standard pool
+	return r.pool
 }
 
 func (r *userRepo) GetById(ctx context.Context, id int) (*model.User, error) {
+	const fname = "GetById"
 	user := &model.User{}
-	query := `SELECT user_id, first_name, last_name, active FROM "user" WHERE user_id = $1`
+	query := `SELECT user_id, first_name, last_name, active, role_id FROM "user" WHERE user_id = $1`
 	err := r.db(ctx).QueryRow(ctx, query, id).Scan(
 		&user.UserId,
 		&user.FirstName,
 		&user.LastName,
 		&user.Active,
+		&user.RoleId,
 	)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("user not found")
-		}
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 	return user, nil
 }
 
 func (r *userRepo) UserCount(ctx context.Context) (int, error) {
+	const fname = "UserCount"
 	var count int
 	query := `SELECT count(*) FROM "user"`
 	err := r.db(ctx).QueryRow(ctx, query).Scan(&count)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 
 	return count, nil
 }
 
+func (r *userRepo) GetAll(ctx context.Context, active bool) ([]model.User, error) {
+	const fname = "GetAll"
+	query := `
+		SELECT 
+			user_id, 
+			first_name, 
+			last_name, 
+			username, 
+			active, 
+			role_id 
+		FROM "user" 
+		WHERE ($1 = false) OR ($1 = true AND deleted_at IS NULL)
+		`
+	rows, err := r.db(ctx).Query(ctx, query, active)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	users, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.User])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return users, nil
+}
+
 func (r *userRepo) GetByUsername(ctx context.Context, username string) (*model.User, error) {
+	const fname = "GetByUsername"
 	var user model.User
-	query := `SELECT user_id, first_name, last_name, password_hash, active FROM "user" WHERE username = $1`
+	query := `SELECT user_id, username, first_name, last_name, password_hash, active, role_id FROM "user" WHERE username = $1`
 	err := r.db(ctx).QueryRow(ctx, query, username).Scan(
 		&user.UserId,
+		&user.Username,
 		&user.FirstName,
 		&user.LastName,
 		&user.PasswordHash,
 		&user.Active,
+		&user.RoleId,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("Username not found")
-		}
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 
 	return &user, nil
 }
 
 func (r *userRepo) Create(ctx context.Context, user *model.User) error {
+	const fname = "Create"
 	query := `
-			INSERT INTO "user" (first_name, last_name, username, password_hash, active)
-			VALUES ($1, $2, $3, $4, $5)
+			INSERT INTO "user" (first_name, last_name, username, password_hash, active, role_id)
+			VALUES ($1, $2, $3, $4, $5, $6)
 			RETURNING user_id
 		`
-	err := r.db(ctx).QueryRow(ctx, query, &user.FirstName, &user.LastName, &user.Username, &user.PasswordHash, &user.Active).Scan(&user.UserId)
+	err := r.db(ctx).QueryRow(ctx, query, user.FirstName, user.LastName, user.Username, user.PasswordHash, user.Active, user.RoleId).Scan(&user.UserId)
 
 	if err != nil {
-		return errors.New("Insert user fail")
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 
 	return nil
 
 }
 
-// func (r *userRepo) GetByIds(ctx context.Context, ids []int) ([]model.Canvas, error) {
-// 	query := "SELECT canvas_id, canvas_name FROM canvas WHERE canvas_id = ANY($1)"
-// 	rows, err := r.db(ctx).Query(ctx, query, ids)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+func (r *userRepo) Update(ctx context.Context, user *model.User) error {
+	const fname = "Update"
+	query := `
+			UPDATE "user"
+			SET 
+				first_name = $1, 
+				last_name = $2,
+				active = $3,
+				password_hash = COALESCE(NULLIF($4, ''), password_hash),
+				role_id = $6
+			WHERE user_id = $5
+		`
+	result, err := r.db(ctx).Exec(ctx, query, user.FirstName, user.LastName, user.Active, user.PasswordHash, user.UserId, user.RoleId)
 
-// 	canvasList, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.Canvas])
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
 
-// 	return canvasList, nil
-// }
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, pgx.ErrNoRows)
+	}
+
+	return nil
+
+}
+
+func (r *userRepo) CountValidate(ctx context.Context, user *model.User) (int, error) {
+	const fname = "CountValidate"
+	var count int
+	query := `
+		SELECT count(*) 
+		FROM "user" 
+		WHERE 
+			first_name = $1 AND 
+			last_name = $2 AND 
+			active = true AND 
+			user_id != $3
+	`
+	err := r.db(ctx).QueryRow(ctx, query, user.FirstName, user.LastName, user.UserId).Scan(&count)
+
+	if err != nil {
+		return 0, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return count, nil
+}
+
+func (r *userRepo) Delete(ctx context.Context, userId int) error {
+	const fname = "Delete"
+	query := `
+			UPDATE "user"
+			SET 
+				active = false,
+				deleted_at = CURRENT_TIMESTAMP
+			WHERE user_id = $1
+		`
+	result, err := r.db(ctx).Exec(ctx, query, userId)
+
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, pgx.ErrNoRows)
+	}
+
+	return nil
+
+}
+
+func (r *userRepo) GetActiveById(ctx context.Context, userId int) (bool, error) {
+	const fname = "GetById"
+	var userActive bool
+	query := `SELECT active FROM "user" WHERE user_id = $1`
+	err := r.db(ctx).QueryRow(ctx, query, userId).Scan(
+		&userActive,
+	)
+
+	if err != nil {
+		return false, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+	return userActive, nil
+}

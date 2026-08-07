@@ -9,6 +9,7 @@ import (
 
 type widgetService struct {
 	txManager      model.TransactionManager
+	prefixError    string
 	widgetRepo     model.WidgetRepository
 	widgetTypeRepo model.WidgetTypeRepository
 	canvasRepo     model.CanvasRepository
@@ -20,13 +21,15 @@ func NewWidgetService(txManager model.TransactionManager, wr model.WidgetReposit
 		widgetRepo:     wr,
 		widgetTypeRepo: wrt,
 		canvasRepo:     cr,
+		prefixError:    "widgetService",
 	}
 }
 
 func (s *widgetService) GetWidgetDetailById(ctx context.Context, widgetId int) (*model.Widget, error) {
+	const fname = "GetWidgetDetailById"
 	widget, err := s.widgetRepo.GetById(ctx, widgetId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
 
 	return &model.Widget{
@@ -36,61 +39,141 @@ func (s *widgetService) GetWidgetDetailById(ctx context.Context, widgetId int) (
 	}, nil
 }
 
-func (s *widgetService) CreateWidgets(ctx context.Context, widgetRequest []model.Widget) error {
+func (s *widgetService) CreateWidget(ctx context.Context, widgets []model.Widget) error {
+	const fname = "CreateWidget"
 	var err error
-	if len(widgetRequest) == 0 {
-		return fmt.Errorf("no widget request")
+
+	if len(widgets) == 0 {
+		return nil
 	}
 
-	_, err = s.canvasRepo.GetById(ctx, widgetRequest[0].CanvasId)
+	_, err = s.canvasRepo.GetById(ctx, widgets[0].CanvasId)
 	if err != nil {
-		return fmt.Errorf("invalid canvas ID provided: %d", widgetRequest[0].CanvasId)
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
 
 	widgetTypes, err := s.widgetTypeRepo.GetAll(ctx)
-	widgetTypeMap := make(map[int]string)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
 
+	widgetTypeMap := make(map[int]string)
 	for _, widgetType := range widgetTypes {
 		widgetTypeMap[widgetType.WidgetTypeId] = widgetType.WidgetTypeName
 	}
 
-	for _, widget := range widgetRequest {
+	for _, widget := range widgets {
 		_, exists := widgetTypeMap[widget.WidgetTypeId]
 
 		if !exists {
-			return fmt.Errorf("invalid widget type ID provided: %d", widget.WidgetTypeId)
+			return fmt.Errorf("[%s]>[%s]: invalid widget type Id provided: %d", s.prefixError, fname, widget.WidgetTypeId)
 		}
 
 	}
 
+	if err = s.widgetRepo.Create(ctx, widgets); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	return nil
+}
+
+func (s *widgetService) UpdateWidget(ctx context.Context, widgets []model.Widget) error {
+	const fname = "UpdateWidget"
+	if len(widgets) == 0 {
+		return nil
+	}
+
+	if err := s.widgetRepo.Update(ctx, widgets); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	return nil
+}
+
+func (s *widgetService) DeleteWidget(ctx context.Context, widgetIds []int) error {
+	const fname = "DeleteWidget"
+	if len(widgetIds) == 0 {
+		return nil
+	}
+	if err := s.widgetRepo.Delete(ctx, widgetIds); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	return nil
+}
+
+func (s *widgetService) UpsertWidget(ctx context.Context, upsertWidget *model.UpsertWidgetReqest) error {
+	const fname = "UpsertWidget"
+	var err error
+	var toCreate, toUpdate []model.Widget
+	var toDelete []int
+
+	dbWidgets, err := s.widgetRepo.GetWidgetByCanvasId(ctx, []int{upsertWidget.CanvasId})
 	if err != nil {
-		return err
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
 
-	if err = s.widgetRepo.Create(ctx, widgetRequest); err != nil {
-		return err
+	if len(dbWidgets) == 0 && len(upsertWidget.UpsertWidgets) == 0 {
+		return nil
 	}
 
-	return nil
-}
-
-func (s *widgetService) UpdateWidget(ctx context.Context, widgetRequest []model.Widget) error {
-	var err error
-	if len(widgetRequest) == 0 {
-		return fmt.Errorf("no widget request")
+	reqMap := make(map[int]model.Widget)
+	for _, reqWidget := range upsertWidget.UpsertWidgets {
+		if reqWidget.WidgetId == 0 {
+			tempCreate := model.Widget{
+				WidgetTypeId:    reqWidget.WidgetTypeId,
+				CanvasId:        upsertWidget.CanvasId,
+				WidgetLabel:     reqWidget.WidgetLabel,
+				DeviceId:        reqWidget.DeviceId,
+				LayoutData:      reqWidget.LayoutData,
+				WidgetColor:     reqWidget.WidgetColor,
+				CustomChartData: reqWidget.CustomChartData,
+			}
+			toCreate = append(toCreate, tempCreate)
+		} else {
+			tempUpdate := model.Widget{
+				WidgetId:        reqWidget.WidgetId,
+				WidgetTypeId:    reqWidget.WidgetTypeId,
+				CanvasId:        upsertWidget.CanvasId,
+				WidgetLabel:     reqWidget.WidgetLabel,
+				DeviceId:        reqWidget.DeviceId,
+				LayoutData:      reqWidget.LayoutData,
+				WidgetColor:     reqWidget.WidgetColor,
+				CustomChartData: reqWidget.CustomChartData,
+			}
+			reqMap[reqWidget.WidgetId] = tempUpdate
+		}
 	}
 
-	if err = s.widgetRepo.Update(ctx, widgetRequest); err != nil {
-		return err
+	for _, dbWidget := range dbWidgets {
+		if reqItem, exists := reqMap[dbWidget.WidgetId]; exists {
+			toUpdate = append(toUpdate, reqItem)
+		} else {
+			toDelete = append(toDelete, dbWidget.WidgetId)
+		}
 	}
 
-	return nil
-}
+	tx, err := s.txManager.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
 
-func (s *widgetService) DeleteWidgets(ctx context.Context, widgetIds []int) error {
-	var err error
-	if err = s.widgetRepo.Delete(ctx, widgetIds); err != nil {
-		return err
+	defer tx.Rollback(ctx)
+
+	if err = s.DeleteWidget(tx.Context(), toDelete); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+	if err = s.CreateWidget(tx.Context(), toCreate); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	if err = s.UpdateWidget(tx.Context(), toUpdate); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
 
 	return nil
