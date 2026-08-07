@@ -151,25 +151,3 @@ CREATE TABLE IF NOT EXISTS canvas_role (
     CONSTRAINT fk_cr_canvas FOREIGN KEY (canvas_id) REFERENCES canvas(canvas_id) ON DELETE CASCADE,
     CONSTRAINT fk_cr_role FOREIGN KEY (role_id) REFERENCES role(role_id) ON DELETE CASCADE
 );
-
---! test
-INSERT INTO canvas (canvas_name) VALUES ('dashboard 1');
-INSERT INTO canvas (canvas_name) VALUES ('dashboard 2');
-INSERT INTO canvas (canvas_name) VALUES ('dashboard 3');
-INSERT INTO widget (widget_type_id, canvas_id, widget_label, layout_data) VALUES (3, 1, 'test widget','{"x": 0, "y": 0, "w": 6, "h":8}');
-
-INSERT INTO menu (menu_name, parent_id)
-SELECT 'System Logs', menu_id 
-FROM menu 
-WHERE menu_name = 'Device Setting'
-ON CONFLICT (menu_name) DO NOTHING;
-
--- 2. Map actions to the new submenu
-INSERT INTO menu_action (menu_id, action_id)
-SELECT m.menu_id, a.action_id
-FROM menu m
-CROSS JOIN action a
-WHERE m.menu_name = 'System Logs' 
-  AND a.action_name IN ('Display', 'Export')
-ON CONFLICT (menu_id, action_id) DO NOTHING;
---! test
