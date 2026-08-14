@@ -71,7 +71,6 @@ type ScheduleClient interface {
 	UnsyncSchedule(scheduleID string) error
 }
 
-// ? setting
 type ScheduleRepository interface {
 	GetById(ctx context.Context, id string) (*Schedule, error)
 	GetAll(ctx context.Context) ([]Schedule, error)
@@ -83,19 +82,4 @@ type ScheduleService interface {
 	GetAllDetail(ctx context.Context) ([]ScheduleDetail, error)
 	CreateSchedule(ctx context.Context, sched *CreateScheduleReq, userId int) error
 	UpdateSchedule(ctx context.Context, sched *UpdateScheduleReq, userId int) error
-}
-
-// ? engine
-type ScheduleEngineRepository interface {
-	GetById(ctx context.Context, id string) (*Schedule, error)
-	UpdateStatus(ctx context.Context, id, status string) error
-	UpdateLastRun(ctx context.Context, id string) error
-	GetActiveSchedules(ctx context.Context) ([]Schedule, error)
-}
-
-type ScheduleEngineService interface {
-	SyncJob(ctx context.Context, id string) error
-	CancelJob(schedID string) bool
-	Start(ctx context.Context) error
-	Stop()
 }

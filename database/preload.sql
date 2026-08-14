@@ -4,7 +4,7 @@ VALUES ('BarChart'),('BulletChart'),('GaugeChart'),('LineChart'),('PieChart'),('
 
 -- Create Menus
 INSERT INTO menu (menu_name) 
-VALUES ('Device'),('User'),('Role'),('Canvas Design'),('Canvas Access'),('Scheduler')
+VALUES ('Device'),('User'),('Role'),('Canvas'),('Canvas Design'),('Canvas Access'),('Scheduler')
 ON CONFLICT (menu_name) DO NOTHING;
 
 -- Create Action
@@ -35,6 +35,14 @@ FROM menu m
 CROSS JOIN action a
 WHERE m.menu_name = 'Role' 
   AND a.action_name IN ('Display', 'Create', 'Update')
+ON CONFLICT (menu_id, action_id) DO NOTHING;
+
+INSERT INTO menu_action (menu_id, action_id)
+SELECT m.menu_id, a.action_id
+FROM menu m
+CROSS JOIN action a
+WHERE m.menu_name = 'Canvas' 
+  AND a.action_name IN ('Display', 'Create','Update','Delete')
 ON CONFLICT (menu_id, action_id) DO NOTHING;
 
 INSERT INTO menu_action (menu_id, action_id)

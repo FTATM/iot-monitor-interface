@@ -48,7 +48,7 @@ func (r *widgetRepo) Create(ctx context.Context, widgets []model.Widget) error {
         INSERT INTO widget (
             widget_type_id,
 			canvas_id,
-			device_id,
+			device_id_s,
 			widget_label,
     		layout_data,
 			widget_color,
@@ -63,7 +63,7 @@ func (r *widgetRepo) Create(ctx context.Context, widgets []model.Widget) error {
 			query,
 			widget.WidgetTypeId,
 			widget.CanvasId,
-			widget.DeviceId,
+			widget.DeviceIds,
 			widget.WidgetLabel,
 			widget.LayoutData,
 			widget.WidgetColor,
@@ -98,7 +98,7 @@ func (r *widgetRepo) Update(ctx context.Context, widgets []model.Widget) error {
         SET 
             widget_type_id = $1,
             canvas_id = $2,
-            device_id = $3,
+            device_id_s = $3,
             widget_label = $4,
             layout_data = $5,
             widget_color = $6,
@@ -110,7 +110,7 @@ func (r *widgetRepo) Update(ctx context.Context, widgets []model.Widget) error {
 		batch.Queue(query,
 			w.WidgetTypeId,
 			w.CanvasId,
-			w.DeviceId,
+			w.DeviceIds,
 			w.WidgetLabel,
 			w.LayoutData,
 			w.WidgetColor,
@@ -169,6 +169,7 @@ func (r *widgetRepo) GetWidgetByCanvasId(ctx context.Context, canvasId []int) ([
 		widget_type_id,
 		widget_label,
 		canvas_id,
+		device_id_s,
 		layout_data,
 		widget_color,
 		custom_chart_data

@@ -153,8 +153,8 @@ func (r *userRepo) CountValidate(ctx context.Context, user *model.User) (int, er
 		WHERE 
 			first_name = $1 AND 
 			last_name = $2 AND 
-			active = true AND 
-			user_id != $3
+			user_id != $3 AND
+			active = true
 	`
 	err := r.db(ctx).QueryRow(ctx, query, user.FirstName, user.LastName, user.UserId).Scan(&count)
 

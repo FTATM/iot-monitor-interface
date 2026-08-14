@@ -15,12 +15,35 @@
       </label>
     </div>
 
-    <!-- Target Goal -->
-    <label class="form-control w-full">
-      <div class="label pb-1"><span class="label-text font-bold text-primary">Target Goal Value</span></div>
-      <input type="number" v-model.number="localConfig.targetValue"
-        class="input input-bordered input-sm w-full border-primary" placeholder="85" />
-    </label>
+    <!-- Scale & Target Settings -->
+    <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
+      <h4 class="font-bold text-sm mb-3 text-base-content">Scale & Target</h4>
+      
+      <div class="grid grid-cols-2 gap-4 mb-3">
+        <label class="form-control w-full">
+          <div class="label pb-1"><span class="label-text font-semibold text-primary">Target Goal Value</span></div>
+          <input type="number" v-model.number="localConfig.targetValue"
+            class="input input-bordered input-sm w-full border-primary" placeholder="85" />
+        </label>
+        
+        <label class="form-control w-full">
+          <div class="label pb-1">
+            <span class="label-text font-semibold">X-Axis Max</span>
+            <span class="label-text-alt ml-2 text-base-content/60">Leave empty for Auto</span>
+          </div>
+          <input type="number" v-model.number="localConfig.xAxisMax"
+            class="input input-bordered input-sm w-full" placeholder="Auto" />
+        </label>
+      </div>
+
+      <label class="form-control w-full">
+        <div class="label pb-1">
+          <span class="label-text font-semibold">Unit Label</span>
+        </div>
+        <input type="text" v-model="localConfig.unit"
+          class="input input-bordered input-sm w-full" placeholder="e.g., GB, °C, %" />
+      </label>
+    </div>
 
     <!-- Dynamic Threshold Zones -->
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
@@ -40,7 +63,7 @@
             <input type="text" v-model="zone.name" class="input input-bordered input-xs w-full" />
           </label>
           
-          <label class="form-control w-20">
+          <label class="form-control w-24">
             <span class="label-text-alt mb-1 font-semibold">Max Value</span>
             <input type="number" v-model.number="zone.value" class="input input-bordered input-xs w-full" />
           </label>
@@ -80,15 +103,16 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-// Setup defaults with an array of thresholds
+// Setup defaults with an array of thresholds and new scale settings
 const localConfig = ref({
-  barColor: props.modelValue.barColor || '#3b82f6',
-  targetColor: props.modelValue.targetColor || '#0f172a',
+  barColor: props.modelValue.barColor || '#1A5FB4',
+  targetColor: props.modelValue.targetColor || '#26A269',
   targetValue: props.modelValue.targetValue !== undefined ? props.modelValue.targetValue : 85,
+  xAxisMax: props.modelValue.xAxisMax !== undefined ? props.modelValue.xAxisMax : null,
+  unit: props.modelValue.unit || '',
   thresholds: props.modelValue.thresholds || [
     { id: Date.now() + 1, name: 'Excellent', value: 120, color: '#e2e8f0' },
-    { id: Date.now() + 2, name: 'Satisfactory', value: 90, color: '#cbd5e1' },
-    { id: Date.now() + 3, name: 'Poor', value: 60, color: '#94a3b8' }
+    { id: Date.now() + 2, name: 'Poor', value: 60, color: '#94a3b8' }
   ]
 });
 

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="hasPermission('Device', 'Display')"  class="w-full mx-auto p-4">
+  <div v-if="hasPermission('Device', 'Display')" class="w-full mx-auto p-4">
     <!-- Page Header Card -->
     <div
       class="bg-base-100 shadow-sm rounded-box border border-base-200 p-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -17,64 +17,62 @@
             values.</p>
         </div>
       </div>
-
-      <!-- Action Button with Iconify Plus Icon -->
-      <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
-        <Icon icon="lucide:plus" class="w-5 h-5 stroke-[3]" />
-        Add Device
-      </button>
-
     </div>
 
     <!-- Devices Table -->
-    <div class="overflow-x-auto shadow rounded-box bg-base-100 border border-base-200">
-      <table class="table w-full text-left">
-        <thead class="bg-base-200 text-base-content">
-          <tr>
-            <th>Device Name</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="device in deviceTable" :key="device.deviceId" class="hover">
-            <td class="font-medium">{{ device.deviceName }}</td>
-            <td>
-              <div class="flex items-center gap-3">
+    <TableData :data="deviceTable" :columns="tableColumns" :initial-sorting="[{ id: 'deviceId', desc: false }]"
+      :is-loading="isLoading">
+      <!-- Toolbar Action Slot -->
+      <template #toolbar-actions>
+        <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
+          <Icon icon="lucide:plus" class="w-5 h-5 mr-1" />
+          Add Device
+        </button>
+      </template>
 
-                <!-- 1. The Real-Time Connection Dot -->
-                <div class="tooltip" :data-tip="device.isConnected ? 'Online' : 'Offline'">
-                  <div class="w-3 h-3 rounded-full"
-                    :class="device.isConnected ? 'bg-success shadow-[0_0_8px_rgba(0,255,0,0.5)]' : 'bg-error'">
-                  </div>
-                </div>
+      <!-- Custom Cell Slot: 'deviceId' -->
+      <template #cell-deviceId="{ value }">
+        <span class="font-medium text-base-content/50">{{ value }}</span>
+      </template>
 
-                <!-- 2. The Administrative Status Badge -->
-                <div class="badge badge-sm font-semibold uppercase tracking-wider"
-                  :class="device.isActive ? 'badge-success' : 'badge-ghost text-base-content/50'">
-                  {{ device.isActive ? 'Active' : 'Inactive' }}
-                </div>
+      <!-- Custom Cell Slot: 'protocol' -->
+      <template #cell-protocol="{ value }">
+        <span class="badge badge-outline badge-sm font-bold uppercase tracking-wider text-primary">
+          {{ value }}
+        </span>
+      </template>
 
-              </div>
-            </td>
-            <td>
-              <div class="flex gap-2">
-                <button @click="openEditModal(device)" class="btn btn-sm btn-primary">
-                  <Icon icon="lucide:pencil" class="w-5 h-5" />
-                </button>
+      <template #cell-status="{ row }">
+        <div class="flex items-center gap-3">
+          <!-- Connection Dot -->
+          <div class="tooltip" :data-tip="row.isConnected ? 'Online' : 'Offline'">
+            <div class="w-3 h-3 rounded-full"
+              :class="row.isConnected ? 'bg-success shadow-[0_0_8px_rgba(0,255,0,0.5)]' : 'bg-error'">
+            </div>
+          </div>
+          <!-- Status Badge -->
+          <div class="badge badge-sm font-semibold uppercase tracking-wider"
+            :class="row.status ? 'badge-success' : 'badge-ghost text-base-content/50'">
+            {{ row.status ? 'Active' : 'Inactive' }}
+          </div>
 
-                <button @click="openDeleteModal(device)" class="btn btn-sm btn-error text-white">
-                  <Icon icon="lucide:trash" class="w-5 h-5" />
-                </button>
-              </div>
-            </td>
-          </tr>
-          <tr v-if="deviceTable.length === 0">
-            <td colspan="5" class="text-center text-base-content/50 p-8">No devices found.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+        </div>
+      </template>
+
+      <!-- Custom Cell Slot: 'actions' -->
+      <template #cell-actions="{ row }">
+        <div class="flex justify-end gap-2">
+          <button @click="openEditModal(row)" class="btn btn-sm btn-primary">
+            <Icon icon="lucide:pencil" class="w-5 h-5" />
+          </button>
+
+          <button @click="openDeleteModal(row)" class="btn btn-sm btn-error text-white">
+            <Icon icon="lucide:trash" class="w-5 h-5" />
+          </button>
+        </div>
+      </template>
+
+    </TableData>
 
     <!-- DaisyUI Native Dialog Modal -->
     <dialog ref="deviceModal" class="modal">
@@ -111,17 +109,24 @@
               </div>
             </label>
 
-            <!-- Value Data -->
-            <!-- <label class="form-control w-full sm:col-span-2">
-              <div class="label pb-1"><span class="label-text font-semibold">Initial Value Data</span></div>
-              <input type="number" v-model.number="form.valueData" placeholder="0" @blur="v$.valueData.$touch()"
-                :class="['input input-bordered w-full', { 'input-error': v$.valueData.$error }]" />
+            <!-- Protocol Select -->
+            <label class="form-control w-full sm:col-span-2">
+              <div class="label pb-1">
+                <span class="label-text font-semibold">Communication Protocol</span>
+              </div>
+              <select v-model="form.protocol" @blur="v$.protocol.$touch()"
+                :class="['select select-bordered w-full', { 'select-error': v$.protocol.$error }]">
+                <option value="" disabled>Select a protocol...</option>
+                <option v-for="proto in protocolList" :key="proto" :value="proto">
+                  {{ proto }}
+                </option>
+              </select>
               <div class="label px-1 py-1 h-6">
-                <span v-if="v$.valueData.$error" class="label-text-alt text-error font-medium">
-                  {{ v$.valueData.$errors[0].$message }}
+                <span v-if="v$.protocol.$error" class="label-text-alt text-error font-medium">
+                  {{ v$.protocol.$errors[0].$message }}
                 </span>
               </div>
-            </label> -->
+            </label>
 
             <!-- ADMINISTRATIVE STATUS (User Controlled) -->
             <div class="sm:col-span-2 p-4 bg-base-200/50 rounded-box border border-base-200">
@@ -172,6 +177,7 @@
         <button @click="closeModal">close</button>
       </form>
     </dialog>
+
     <dialog ref="deleteModal" class="modal z-[200]">
       <div class="modal-box">
         <h3 class="font-bold text-lg text-error flex items-center gap-2">
@@ -203,17 +209,21 @@ import { ref, onMounted, computed } from 'vue';
 import { useMutation } from '@/composables/useMutation';
 import { useFetch } from '@/composables/useFetch';
 import { useVuelidate } from '@vuelidate/core';
-import { required, numeric, helpers } from '@vuelidate/validators';
+import { required, helpers } from '@vuelidate/validators';
 import { toast } from 'vue3-toastify';
 import { Icon } from '@iconify/vue';
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
+import TableData from '@/components/TableData.vue';
 
 // --- COMPOSABLES ---
-const { data: deviceAdded, error: deviceAddedError, execute: deviceAddedApi } = useMutation();
-const { data: deviceUpdated, error: deviceUpdatedError, execute: deviceUpdatedApi } = useMutation();
+const { error: deviceAddedError, execute: deviceAddedApi } = useMutation();
+const { error: deviceUpdatedError, execute: deviceUpdatedApi } = useMutation();
 const { data: deviceAllFetch, isLoading, error: deviceAllFetchError, execute: deviceAllFetchApi } = useFetch();
 const { error: deviceDeletedError, isLoading: isDeleting, execute: deviceDeletedApi } = useMutation();
+
+// New API call for the Protocol types
+const { data: protocolData, error: protocolError, execute: protocolFetchApi } = useFetch();
 
 // --- STORE ---
 const permissionStore = usePermissionStore();
@@ -226,11 +236,37 @@ const editingDeviceId = ref(null);
 const deviceTable = ref([]);
 const deleteModal = ref(null);
 const deviceToDelete = ref(null);
+const protocolList = ref([]); // Holds the array of protocol strings
 
-// Updated form state to map to your boolean database fields
+const tableColumns = [
+  {
+    header: 'ID',
+    accessorKey: 'deviceId',
+    meta: { headerClass: 'w-16', cellClass: 'font-bold' }
+  },
+  {
+    header: 'Device Name',
+    accessorKey: 'deviceName'
+  },
+  {
+    header: 'Protocol',
+    accessorKey: 'protocol' // Added Protocol Column
+  },
+  {
+    header: 'Status',
+    accessorKey: 'status'
+  },
+  {
+    header: 'Actions',
+    id: 'actions',
+    enableSorting: false,
+    meta: { headerClass: 'text-right', cellClass: 'text-right' }
+  }
+];
+
 const form = ref({
   deviceName: '',
-  // valueData: 0,
+  protocol: '', // Added protocol state
   isActive: true,
   isConnected: false,
   lastSeenAt: null
@@ -239,21 +275,17 @@ const form = ref({
 // --- HELPER FUNCTIONS ---
 const formatLastSeen = (timestamp) => {
   if (!timestamp) return 'Never connected';
-
   const date = new Date(timestamp);
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit'
-  });
+  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 
 // --- VALIDATION RULES ---
 const rules = computed(() => ({
   deviceName: {
     required: helpers.withMessage('Device name is required', required)
+  },
+  protocol: {
+    required: helpers.withMessage('Protocol selection is required', required)
   }
 }));
 
@@ -265,7 +297,7 @@ const openCreateModal = () => {
   editingDeviceId.value = null;
   form.value = {
     deviceName: '',
-    // valueData: 0,
+    protocol: '',
     isActive: true,
     isConnected: false,
     lastSeenAt: null
@@ -279,7 +311,7 @@ const openEditModal = (device) => {
   editingDeviceId.value = device.deviceId;
   form.value = {
     deviceName: device.deviceName,
-    // valueData: device.valueData,
+    protocol: device.protocol || '',
     isActive: device.isActive,
     isConnected: device.isConnected,
     lastSeenAt: device.lastSeenAt
@@ -291,7 +323,6 @@ const openEditModal = (device) => {
 const closeModal = () => {
   deviceModal.value.close();
 };
-
 
 const openDeleteModal = (device) => {
   deviceToDelete.value = device;
@@ -313,7 +344,18 @@ const confirmDelete = async () => {
     await loadTable();
     closeDeleteModal();
   } else {
-    toast.error(userDeletedError.value?.message || "Failed to delete device");
+    toast.error(deviceDeletedError.value?.message || "Failed to delete device");
+  }
+};
+
+const loadProtocols = async () => {
+  await protocolFetchApi('/device/getprotocoltype');
+  if (!protocolError.value && protocolData.value) {
+    // Assuming the API returns an array of strings in the data property
+
+    protocolList.value = protocolData.value.data || [];
+  } else {
+    toast.error("Failed to load protocol types");
   }
 };
 
@@ -326,18 +368,15 @@ const loadTable = async () => {
       deviceTable.value.push({
         deviceId: i.deviceId,
         deviceName: i.deviceName,
+        protocol: i.protocol, // Map the protocol data for the table
         valueData: i.valueData,
         isActive: i.isActive,
         isConnected: i.isConnected,
-        lastSeenAt: i.lastSeenAt
+        lastSeenAt: i.lastSeenAt,
+        status: i.isActive // Mapping isActive to status for the table badge
       });
     }
   }
-
-}
-
-const setupData = async () => {
-  await loadTable
 };
 
 const submitForm = async () => {
@@ -349,42 +388,40 @@ const submitForm = async () => {
 
   const payload = {
     deviceName: form.value.deviceName,
-    // valueData: Number(form.value.valueData),
+    protocol: form.value.protocol, // Included in payload
     isActive: form.value.isActive
   };
 
   if (isEditing.value) {
     payload.deviceId = editingDeviceId.value;
-    delete payload.deviceName;
+    delete payload.deviceName; // Device name is read-only on edit
 
     await deviceUpdatedApi('/device/update', payload, 'PUT');
 
     if (!deviceUpdatedError.value) {
       closeModal();
       toast.success("Device updated successfully!");
-
       await loadTable();
     } else {
       toast.error(deviceUpdatedError.value?.message || "Failed to update device");
     }
 
   } else {
+    // Note: Creating requires passing an array of objects to this specific endpoint
     await deviceAddedApi('/device/create', [payload], 'POST');
 
     if (!deviceAddedError.value) {
       closeModal();
-      toast.success("Device create successfully!");
-
+      toast.success("Device created successfully!");
       await loadTable();
     } else {
-      toast.error(deviceUpdatedError.value?.message || "Failed to update device");
+      toast.error(deviceAddedError.value?.message || "Failed to create device");
     }
   }
 };
 
-
 onMounted(async () => {
+  await loadProtocols();
   await loadTable();
-  // await setupData();
 });
 </script>

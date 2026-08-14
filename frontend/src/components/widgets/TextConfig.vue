@@ -1,57 +1,75 @@
 <template>
   <div class="flex flex-col gap-5">
     
-    <!-- Content Editor -->
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
-      <h4 class="font-bold text-sm mb-3 text-base-content">Text Content</h4>
+      <h4 class="font-bold text-sm mb-3 text-base-content">Text Editor</h4>
       
-      <label class="form-control w-full">
-        <textarea v-model="localConfig.content"
-          class="textarea textarea-bordered w-full min-h-[150px] text-base" 
-          placeholder="Type your notes, instructions, or descriptions here..."></textarea>
-      </label>
+      <!-- Unified Toolbar -->
+      <div class="flex flex-wrap items-center gap-2 mb-2 bg-base-100 p-2 rounded border border-base-300 shadow-sm">
+        
+        <!-- Text Styling -->
+        <div class="join border border-base-300">
+          <button @click.prevent="formatText('bold')" class="btn btn-sm btn-ghost join-item px-3 font-bold" title="Bold">B</button>
+          <button @click.prevent="formatText('italic')" class="btn btn-sm btn-ghost join-item px-3 italic" title="Italic">I</button>
+          <button @click.prevent="formatText('underline')" class="btn btn-sm btn-ghost join-item px-3 underline" title="Underline">U</button>
+        </div>
+
+        <!-- Lists -->
+        <div class="join border border-base-300">
+          <button @click.prevent="formatText('insertUnorderedList')" class="btn btn-sm btn-ghost join-item px-3" title="Bullet List">• List</button>
+          <button @click.prevent="formatText('insertOrderedList')" class="btn btn-sm btn-ghost join-item px-3" title="Numbered List">1. List</button>
+        </div>
+
+        <div class="divider divider-horizontal mx-0"></div>
+
+        <!-- Block Alignment (Controls global alignment) -->
+        <div class="join border border-base-300">
+          <button @click.prevent="localConfig.textAlign = 'left'" :class="{ 'bg-base-300': localConfig.textAlign === 'left' }" class="btn btn-sm btn-ghost join-item px-2" title="Align Left">
+            <Icon icon="lucide:align-left" class="w-4 h-4" />
+          </button>
+          <button @click.prevent="localConfig.textAlign = 'center'" :class="{ 'bg-base-300': localConfig.textAlign === 'center' }" class="btn btn-sm btn-ghost join-item px-2" title="Align Center">
+            <Icon icon="lucide:align-center" class="w-4 h-4" />
+          </button>
+          <button @click.prevent="localConfig.textAlign = 'right'" :class="{ 'bg-base-300': localConfig.textAlign === 'right' }" class="btn btn-sm btn-ghost join-item px-2" title="Align Right">
+            <Icon icon="lucide:align-right" class="w-4 h-4" />
+          </button>
+        </div>
+
+        <div class="divider divider-horizontal mx-0"></div>
+
+        <!-- Font Size & Color -->
+        <div class="flex items-center gap-2 ml-auto">
+          <div class="tooltip tooltip-bottom" data-tip="Base Font Size">
+            <input type="number" v-model.number="localConfig.fontSize" class="input input-bordered input-sm w-16 text-center" placeholder="14" />
+          </div>
+          <div class="tooltip tooltip-bottom" data-tip="Text Color">
+            <input type="color" v-model="localConfig.textColor" class="h-8 w-10 cursor-pointer rounded border border-base-300 p-0" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Editable Content Area -->
+      <!-- ⚡ NEW: Added max-h-[300px] so the box stops growing and starts scrolling -->
+      <div 
+        ref="editorRef"
+        contenteditable="true"
+        @input="updateContent"
+        @blur="updateContent"
+        class="rich-text-container textarea textarea-bordered w-full min-h-[200px] max-h-[300px] overflow-y-auto bg-base-100 focus:outline-none focus:border-primary"
+        :style="{ 
+          textAlign: localConfig.textAlign, 
+          fontSize: localConfig.fontSize + 'px', 
+          color: localConfig.textColor 
+        }"
+      ></div>
     </div>
 
-    <!-- Formatting & Display Options -->
-    <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
-      <h4 class="font-bold text-sm mb-3 text-base-content">Formatting & Display</h4>
-      
-      <div class="flex flex-col gap-3 mb-4">
-        <label class="cursor-pointer label justify-start gap-4">
-          <input type="checkbox" v-model="localConfig.showHeader" class="toggle toggle-primary toggle-sm" />
-          <span class="label-text font-semibold">Show Widget Header Card</span>
-        </label>
-      </div>
-
-      <div class="grid grid-cols-2 gap-4 mb-4">
-        <label class="form-control w-full">
-          <div class="label pb-1">
-            <span class="label-text font-semibold">Text Alignment</span>
-          </div>
-          <select v-model="localConfig.textAlign" class="select select-bordered select-sm w-full">
-            <option value="left">Left Align</option>
-            <option value="center">Center Align</option>
-            <option value="right">Right Align</option>
-            <option value="justify">Justify</option>
-          </select>
-        </label>
-        
-        <label class="form-control w-full">
-          <div class="label pb-1">
-            <span class="label-text font-semibold">Font Size (px)</span>
-          </div>
-          <input type="number" v-model.number="localConfig.fontSize"
-            class="input input-bordered input-sm w-full" placeholder="14" />
-        </label>
-      </div>
-
-      <div class="grid grid-cols-1 gap-4">
-        <label class="form-control w-full">
-          <div class="label pb-1"><span class="label-text font-bold">Text Color</span></div>
-          <input type="color" v-model="localConfig.textColor"
-            class="h-10 w-full cursor-pointer rounded border border-base-300 p-0" />
-        </label>
-      </div>
+    <!-- Widget Options -->
+    <div class="px-2">
+      <label class="cursor-pointer flex items-center gap-4">
+        <input type="checkbox" v-model="localConfig.showHeader" class="toggle toggle-primary toggle-sm" />
+        <span class="label-text font-semibold">Show Widget Header Card</span>
+      </label>
     </div>
 
   </div>
@@ -59,6 +77,7 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue';
+import { Icon } from '@iconify/vue'; 
 
 const props = defineProps({
   modelValue: {
@@ -68,8 +87,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue']);
+const editorRef = ref(null);
 
-// Provide sensible defaults for the Text block
 const localConfig = ref({
   content: props.modelValue.content || '',
   showHeader: props.modelValue.showHeader !== undefined ? props.modelValue.showHeader : true,
@@ -78,13 +97,60 @@ const localConfig = ref({
   textColor: props.modelValue.textColor || '#334155'
 });
 
-// Watch the entire object and emit ANY change automatically
+const formatText = (command) => {
+  document.execCommand(command, false, null);
+  editorRef.value.focus();
+  updateContent();
+};
+
+const updateContent = () => {
+  if (editorRef.value) {
+    localConfig.value.content = editorRef.value.innerHTML;
+  }
+};
+
 watch(localConfig, (newVal) => {
-  emit('update:modelValue', { ...newVal });
+  emit('update:modelValue', JSON.parse(JSON.stringify(newVal)));
 }, { deep: true });
 
-// Emit the default values immediately when the modal opens
 onMounted(() => {
-  emit('update:modelValue', { ...localConfig.value });
+  if (editorRef.value) {
+    editorRef.value.innerHTML = localConfig.value.content || 'Type your notes or instructions here...';
+  }
+  emit('update:modelValue', JSON.parse(JSON.stringify(localConfig.value)));
 });
 </script>
+
+<style scoped>
+.rich-text-container :deep(b),
+.rich-text-container :deep(strong) {
+  font-weight: 700;
+}
+
+.rich-text-container :deep(i),
+.rich-text-container :deep(em) {
+  font-style: italic;
+}
+
+.rich-text-container :deep(u) {
+  text-decoration: underline;
+}
+
+.rich-text-container :deep(ul) {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.rich-text-container :deep(ol) {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.rich-text-container :deep(li) {
+  margin-bottom: 0.25rem;
+}
+</style>

@@ -1,30 +1,16 @@
 <template>
   <div class="flex flex-col gap-5">
-    
-    <!-- Data Structure -->
-    <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
-      <h4 class="font-bold text-sm mb-3 text-base-content">Table Structure</h4>
-      
-      <label class="form-control w-full">
-        <div class="label pb-1">
-          <span class="label-text font-semibold">Column Headers</span>
-          <span class="label-text-alt">Comma-separated</span>
-        </div>
-        <input type="text" v-model="localConfig.columns"
-          class="input input-bordered input-sm w-full" placeholder="ID, Name, Role, Status" />
-      </label>
-    </div>
 
     <!-- UI Toggles -->
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
       <h4 class="font-bold text-sm mb-3 text-base-content">Display Options</h4>
-      
+
       <div class="flex flex-col gap-3">
         <label class="cursor-pointer label justify-start gap-4">
           <input type="checkbox" v-model="localConfig.isDense" class="toggle toggle-primary toggle-sm" />
           <span class="label-text font-semibold">Dense Spacing (Compact)</span>
         </label>
-        
+
         <label class="cursor-pointer label justify-start gap-4">
           <input type="checkbox" v-model="localConfig.isStriped" class="toggle toggle-primary toggle-sm" />
           <span class="label-text font-semibold">Striped Rows (Zebra)</span>
@@ -33,6 +19,25 @@
         <label class="cursor-pointer label justify-start gap-4">
           <input type="checkbox" v-model="localConfig.showRowCount" class="toggle toggle-primary toggle-sm" />
           <span class="label-text font-semibold">Show Row Count in Header</span>
+        </label>
+
+        <label class="form-control w-full mt-2">
+          <div class="label pb-1">
+            <span class="label-text font-semibold">Maximum Rows to Display</span>
+          </div>
+          <input type="number" v-model="localConfig.maxRows" class="input input-bordered input-sm w-full"
+            placeholder="10" min="1" max="100" />
+        </label>
+
+        <label class="cursor-pointer label justify-start gap-4">
+          <input type="checkbox" v-model="localConfig.use24HourFormat" class="toggle toggle-secondary toggle-sm" />
+          <span class="label-text font-semibold">Use 24-Hour Time Format</span>
+        </label>
+
+        <!-- ⚡ NEW: Toggle to show/hide the time column -->
+        <label class="cursor-pointer label justify-start gap-4">
+          <input type="checkbox" v-model="localConfig.showTimeColumn" class="toggle toggle-secondary toggle-sm" />
+          <span class="label-text font-semibold">Show Time Column</span>
         </label>
       </div>
     </div>
@@ -66,22 +71,21 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-// Provide sensible defaults for a Table
 const localConfig = ref({
-  columns: props.modelValue.columns || 'ID, Date, Description, Status, Amount',
   isStriped: props.modelValue.isStriped !== undefined ? props.modelValue.isStriped : true,
   isDense: props.modelValue.isDense !== undefined ? props.modelValue.isDense : false,
   showRowCount: props.modelValue.showRowCount !== undefined ? props.modelValue.showRowCount : true,
+  maxRows: props.modelValue.maxRows !== undefined ? props.modelValue.maxRows : 10,
   headerColor: props.modelValue.headerColor || '#f8fafc',
-  headerTextColor: props.modelValue.headerTextColor || '#334155'
+  headerTextColor: props.modelValue.headerTextColor || '#334155',
+  use24HourFormat: props.modelValue.use24HourFormat !== undefined ? props.modelValue.use24HourFormat : true,
+  showTimeColumn: props.modelValue.showTimeColumn !== undefined ? props.modelValue.showTimeColumn : true // ⚡ Initialized here
 });
 
-// Watch the entire object and emit ANY change automatically
 watch(localConfig, (newVal) => {
   emit('update:modelValue', { ...newVal });
 }, { deep: true });
 
-// Emit the default values immediately when the modal opens
 onMounted(() => {
   emit('update:modelValue', { ...localConfig.value });
 });

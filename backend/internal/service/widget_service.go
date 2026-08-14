@@ -122,10 +122,11 @@ func (s *widgetService) UpsertWidget(ctx context.Context, upsertWidget *model.Up
 	for _, reqWidget := range upsertWidget.UpsertWidgets {
 		if reqWidget.WidgetId == 0 {
 			tempCreate := model.Widget{
-				WidgetTypeId:    reqWidget.WidgetTypeId,
-				CanvasId:        upsertWidget.CanvasId,
-				WidgetLabel:     reqWidget.WidgetLabel,
-				DeviceId:        reqWidget.DeviceId,
+				WidgetTypeId: reqWidget.WidgetTypeId,
+				CanvasId:     upsertWidget.CanvasId,
+				WidgetLabel:  reqWidget.WidgetLabel,
+				DeviceIds:    reqWidget.DeviceIds,
+				// DeviceId:        reqWidget.DeviceId,
 				LayoutData:      reqWidget.LayoutData,
 				WidgetColor:     reqWidget.WidgetColor,
 				CustomChartData: reqWidget.CustomChartData,
@@ -133,11 +134,12 @@ func (s *widgetService) UpsertWidget(ctx context.Context, upsertWidget *model.Up
 			toCreate = append(toCreate, tempCreate)
 		} else {
 			tempUpdate := model.Widget{
-				WidgetId:        reqWidget.WidgetId,
-				WidgetTypeId:    reqWidget.WidgetTypeId,
-				CanvasId:        upsertWidget.CanvasId,
-				WidgetLabel:     reqWidget.WidgetLabel,
-				DeviceId:        reqWidget.DeviceId,
+				WidgetId:     reqWidget.WidgetId,
+				WidgetTypeId: reqWidget.WidgetTypeId,
+				CanvasId:     upsertWidget.CanvasId,
+				WidgetLabel:  reqWidget.WidgetLabel,
+				DeviceIds:    reqWidget.DeviceIds,
+				// DeviceId:        reqWidget.DeviceId,
 				LayoutData:      reqWidget.LayoutData,
 				WidgetColor:     reqWidget.WidgetColor,
 				CustomChartData: reqWidget.CustomChartData,

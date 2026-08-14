@@ -234,3 +234,78 @@ func (r *canvasRepo) DeleteCanvasRole(ctx context.Context, canvasroles []model.C
 
 	return nil
 }
+
+func (r *canvasRepo) Create(ctx context.Context, canvas *model.Canvas) error {
+	const fname = "Create"
+	query := `
+		INSERT INTO canvas (canvas_name)
+		VALUES ($1)
+		RETURNING canvas_id
+	`
+	err := r.db(ctx).QueryRow(ctx, query, canvas.CanvasName).Scan(&canvas.CanvasId)
+
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return nil
+
+}
+func (r *canvasRepo) Update(ctx context.Context, canvas *model.Canvas) error {
+	const fname = "Update"
+	query := `
+		UPDATE canvas
+		SET 
+			canvas_name = $1
+		WHERE canvas_id = $2		
+	`
+	result, err := r.db(ctx).Exec(ctx, query, canvas.CanvasName, canvas.CanvasId)
+
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, pgx.ErrNoRows)
+	}
+
+	return nil
+}
+
+func (r *canvasRepo) Delete(ctx context.Context, canvasId int) error {
+	const fname = "Delete"
+	query := `
+		DELETE FROM canvas
+		WHERE canvas_id = $1
+	`
+	result, err := r.db(ctx).Exec(ctx, query, canvasId)
+
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, pgx.ErrNoRows)
+	}
+
+	return nil
+}
+
+func (r *canvasRepo) CountValidate(ctx context.Context, canvas *model.Canvas) (int, error) {
+	const fname = "CountValidate"
+	var count int
+	query := `
+		SELECT count(*) 
+		FROM canvas 
+		WHERE 
+			canvas_name = $1 AND 
+			canvas_id != $2
+	`
+	err := r.db(ctx).QueryRow(ctx, query, canvas.CanvasName, canvas.CanvasId).Scan(&count)
+
+	if err != nil {
+		return 0, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return count, nil
+}

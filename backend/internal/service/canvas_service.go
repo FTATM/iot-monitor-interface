@@ -3,19 +3,21 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/FTATM/iot-monitor-interface/internal/model"
 )
 
 type canvasService struct {
-	txManager   model.TransactionManager
-	prefixError string
-	canvasRepo  model.CanvasRepository
-	widgetRepo  model.WidgetRepository
+	txManager    model.TransactionManager
+	prefixError  string
+	canvasRepo   model.CanvasRepository
+	widgetRepo   model.WidgetRepository
+	auditLogRepo model.AuditLogRepository
 }
 
-func NewCanvasService(txManager model.TransactionManager, wr model.WidgetRepository, cr model.CanvasRepository) model.CanvasService {
-	return &canvasService{txManager: txManager, prefixError: "canvasService", widgetRepo: wr, canvasRepo: cr}
+func NewCanvasService(txManager model.TransactionManager, wr model.WidgetRepository, cr model.CanvasRepository, auditlogRepo model.AuditLogRepository) model.CanvasService {
+	return &canvasService{txManager: txManager, prefixError: "canvasService", widgetRepo: wr, canvasRepo: cr, auditLogRepo: auditlogRepo}
 }
 
 func (s *canvasService) GetAllCanvas(ctx context.Context) ([]model.Canvas, error) {
@@ -179,6 +181,171 @@ func (s *canvasService) UpsertCanvasRole(ctx context.Context, upsertCanvasRole *
 	// if err = s.auditLogRepo.Create(tx.Context(), auditlogs); err != nil {
 	// 	return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	// }
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	return nil
+}
+
+func (s *canvasService) CreateCanvas(ctx context.Context, createCanvas *model.CreateCanvas, authUserId int) error {
+	const fname = "CreateCanvas"
+
+	canvas := model.Canvas{
+		CanvasName: createCanvas.CanvasName,
+	}
+
+	duplicate, err := s.canvasRepo.CountValidate(ctx, &canvas)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	if duplicate > 0 {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, model.ErrDuplicate)
+	}
+
+	tx, err := s.txManager.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	err = s.canvasRepo.Create(ctx, &canvas)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	auditlogs := make([]model.AuditLog, 0, 1)
+	newData, err := model.StructToDynamicJSON(canvas)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+	audit := model.AuditLog{
+		EntityType: "canvas",
+		EntityId:   strconv.Itoa(canvas.CanvasId),
+		Action:     model.CreateAction,
+		ChangedBy:  authUserId,
+		OldData:    nil,
+		NewData:    newData,
+	}
+	auditlogs = append(auditlogs, audit)
+
+	if err = s.auditLogRepo.Create(tx.Context(), auditlogs); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	return nil
+}
+func (s *canvasService) UpdateCanvas(ctx context.Context, updateCanvas *model.UpdateCanvas, authUserId int) error {
+	const fname = "UpdateCanvas"
+
+	canvas := model.Canvas{
+		CanvasId:   updateCanvas.CanvasId,
+		CanvasName: updateCanvas.CanvasName,
+	}
+
+	duplicate, err := s.canvasRepo.CountValidate(ctx, &canvas)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	if duplicate > 0 {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, model.ErrDuplicate)
+	}
+
+	oldCanvas, err := s.canvasRepo.GetById(ctx, canvas.CanvasId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	if oldCanvas.IsSame(canvas) {
+		return nil
+	}
+
+	tx, err := s.txManager.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	err = s.canvasRepo.Update(ctx, &canvas)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	auditlogs := make([]model.AuditLog, 0, 1)
+	oldData, err := model.StructToDynamicJSON(oldCanvas)
+	newData, err := model.StructToDynamicJSON(canvas)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+	audit := model.AuditLog{
+		EntityType: "canvas",
+		EntityId:   strconv.Itoa(canvas.CanvasId),
+		Action:     model.UpdateAction,
+		ChangedBy:  authUserId,
+		OldData:    oldData,
+		NewData:    newData,
+	}
+	auditlogs = append(auditlogs, audit)
+
+	if err = s.auditLogRepo.Create(tx.Context(), auditlogs); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	return nil
+}
+
+func (s *canvasService) DeleteCanvas(ctx context.Context, canvasId int, authUserId int) error {
+	const fname = "DeleteCanvas"
+
+	oldCanvas, err := s.canvasRepo.GetById(ctx, canvasId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	tx, err := s.txManager.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	err = s.canvasRepo.Delete(ctx, canvasId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	auditlogs := make([]model.AuditLog, 0, 1)
+	oldData, err := model.StructToDynamicJSON(oldCanvas)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	audit := model.AuditLog{
+		EntityType: "canvas",
+		EntityId:   strconv.Itoa(canvasId),
+		Action:     model.DeleteAction,
+		ChangedBy:  authUserId,
+		OldData:    oldData,
+		NewData:    nil,
+	}
+	auditlogs = append(auditlogs, audit)
+
+	if err = s.auditLogRepo.Create(tx.Context(), auditlogs); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)

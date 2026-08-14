@@ -6,6 +6,7 @@ import UserView from '@/views/management/UserView.vue';
 import DeviceView from '@/views/management/DeviceView.vue';
 import RoleView from '@/views/management/RoleView.vue';
 import SchedulerView from '@/views/SchedulerView.vue';
+import CanvasView from '@/views/canvasManagement/CanvasView.vue';
 import CanvasDesignView from '@/views/canvasManagement/CanvasDesignView.vue';
 import CanvasAccessView from '@/views/canvasManagement/CanvasAccessView.vue';
 import Test from '@/views/Test.vue';
@@ -44,6 +45,11 @@ const router = createRouter({
       name: 'canvasManagement',
       meta: { requiresAuth: true },
       children: [
+        {
+          path: 'canvsa',
+          name: 'canvas',
+          component: CanvasView,
+        },
         {
           path: 'design',
           name: 'canvasDesign',

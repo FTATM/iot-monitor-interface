@@ -18,60 +18,53 @@
         </div>
       </div>
 
-      <!-- Action Button -->
-      <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
-        <Icon icon="lucide:plus" class="w-5 h-5 stroke-[3]" />
-        Add User
-      </button>
-
     </div>
 
     <!-- Users Table -->
-    <div class="overflow-x-auto shadow rounded-box bg-base-100 border border-base-200">
-      <table class="table w-full text-left">
-        <thead class="bg-base-200 text-base-content">
-          <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Username</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="user in userTable" :key="user.userId" class="hover">
-            <td>{{ user.userId }}</td>
-            <td class="font-medium">{{ user.firstName }} {{ user.lastName }}</td>
-            <td>{{ user.username }}</td>
-            <td>
-              <span class="badge badge-outline badge-primary badge-sm font-semibold">
-                {{ getRoleName(user.roleId) }}
-              </span>
-            </td>
-            <td>
-              <span :class="['badge', user.active ? 'badge-success text-success-content' : 'badge-ghost']">
-                {{ user.active ? 'Active' : 'Disabled' }}
-              </span>
-            </td>
-            <td>
-              <div class="flex gap-2">
-                <button @click="openEditModal(user)" class="btn btn-sm btn-primary">
-                  <Icon icon="lucide:pencil" class="w-5 h-5" />
-                </button>
-                <button @click="openDeleteModal(user)" class="btn btn-sm btn-error text-white">
-                  <Icon icon="lucide:trash" class="w-5 h-5" />
-                </button>
-              </div>
-            </td>
-          </tr>
-          <tr v-if="userTable.length === 0">
-            <td colspan="5" class="text-center text-base-content/50 p-8">No users found.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <TableData :data="userTable" :columns="tableColumns" :initial-sorting="[{ id: 'userId', desc: false }]"
+      :is-loading="isLoading">
+      <!-- Toolbar Action Slot -->
+      <template #toolbar-actions>
+        <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
+          <Icon icon="lucide:plus" class="w-5 h-5" />
+          Add User
+        </button>
+      </template>
 
+      <!-- Custom Cell Slot: 'deviceId' -->
+      <template #cell-userId="{ value }">
+        <span class="font-medium text-base-content/50">{{ value }}</span>
+      </template>
+
+      <template #cell-firstName="{ row }">
+        <span class="font-medium">{{ row.firstName }} {{ row.lastName }}</span>
+      </template>
+
+      <template #cell-roleId="{ value }">
+        <span class="badge badge-outline badge-primary badge-sm font-semibold">
+          {{ getRoleName(value) }}
+        </span>
+      </template>
+
+      <template #cell-active="{ value }">
+        <span :class="['badge', value ? 'badge-success text-success-content' : 'badge-ghost']">
+          {{ value ? 'Active' : 'Disabled' }}
+        </span>
+      </template>
+
+
+      <!-- Custom Cell Slot: 'actions' -->
+      <template #cell-actions="{ row }">
+        <div class="flex justify-end gap-2">
+          <button @click="openEditModal(row)" class="btn btn-sm btn-primary">
+            <Icon icon="lucide:pencil" class="w-5 h-5" />
+          </button>
+          <button @click="openDeleteModal(row)" class="btn btn-sm btn-error text-white">
+            <Icon icon="lucide:trash" class="w-5 h-5" />
+          </button>
+        </div>
+      </template>
+    </TableData>
     <!-- DaisyUI Native Dialog Modal -->
     <dialog ref="userModal" class="modal">
       <!-- Increased max-width and removed default padding to build our own header/body/footer -->
@@ -154,8 +147,9 @@
               <span class="label-text-alt text-error">*</span>
             </div>
 
-            <SearchableDropdown v-model="form.roleId" :options="Array.from(rolesMaster.values())" label-key="roleName" value-key="roleId"
-              placeholder="Search for a role..." :error="v$.roleId.$error" @blur="v$.roleId.$touch()" />
+            <SearchableDropdown v-model="form.roleId" :options="Array.from(rolesMaster.values())" label-key="roleName"
+              value-key="roleId" placeholder="Search for a role..." :error="v$.roleId.$error"
+              @blur="v$.roleId.$touch()" />
 
             <div class="label px-1 py-1 h-6">
               <span v-if="v$.roleId.$error" class="label-text-alt text-error font-medium">
@@ -227,6 +221,7 @@ import { Icon } from '@iconify/vue';
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
 import SearchableDropdown from '@/components/SearchableDropdown.vue';
+import TableData from '@/components/TableData.vue';
 
 
 // --- COMPOSABLES ---
@@ -248,6 +243,36 @@ const userTable = ref([]);
 const deleteModal = ref(null);
 const userToDelete = ref(null);
 const rolesMaster = ref(new Map());
+
+const tableColumns = [
+  {
+    header: 'ID',
+    accessorKey: 'userId',
+    meta: { headerClass: 'w-16', cellClass: 'font-bold' }
+  },
+  {
+    header: 'Name',
+    accessorKey: 'firstName',
+  },
+  {
+    header: 'Username',
+    accessorKey: 'username',
+  },
+  {
+    header: 'Role',
+    accessorKey: 'roleId',
+  },
+  {
+    header: 'Active',
+    accessorKey: 'active',
+  },
+  {
+    header: 'Actions',
+    id: 'actions',
+    enableSorting: false,
+    meta: { headerClass: 'text-right', cellClass: 'text-right' }
+  }
+];
 
 const form = ref({
   firstName: '',
@@ -366,7 +391,7 @@ const loadRoles = async () => {
   if (!roleAllError.value && roleData.value) {
     rolesMaster.value.clear();
     for (let i of roleData.value.data) {
-      rolesMaster.value.set(i.roleId,i)
+      rolesMaster.value.set(i.roleId, i)
     }
   }
   else {

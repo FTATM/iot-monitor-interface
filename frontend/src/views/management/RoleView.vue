@@ -18,49 +18,37 @@
                 </div>
             </div>
 
-            <!-- Action Button -->
-            <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
-                <Icon icon="lucide:plus" class="w-5 h-5 stroke-[3]" />
-                Add Role
-            </button>
         </div>
 
-        <!-- Data Table Card -->
-        <div class="bg-base-100 shadow-sm rounded-box border border-base-200 overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="table w-full text-left">
-                    <!-- head -->
-                    <thead class="bg-base-200/50 text-base-content">
-                        <tr>
-                            <th class="w-32">Role ID</th>
-                            <th>Role Name</th>
-                            <th class="text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-if="isLoading">
-                            <td colspan="3" class="text-center py-8 text-base-content/50">
-                                <span class="loading loading-spinner loading-md"></span>
-                            </td>
-                        </tr>
-                        <tr v-else-if="roleTable.length === 0">
-                            <td colspan="3" class="text-center py-8 text-base-content/50">No roles found. Create one to
-                                get started.</td>
-                        </tr>
-                        <tr v-for="role in roleTable" :key="role.roleId" class="hover:bg-base-200/30 transition-colors">
-                            <td class="font-mono text-xs text-base-content/70">{{ role.roleId }}</td>
-                            <td class="font-semibold">{{ role.roleName }}</td>
-                            <td class="text-right">
-                                <button class="btn btn-sm btn-primary" @click="openEditModal(role)">
-                                    <Icon icon="lucide:pencil" class="w-5 h-5" />
-                                </button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        <!-- Data Table-->
+        <TableData 
+            :data="roleTable" 
+            :columns="tableColumns" 
+            :initial-sorting="[{ id: 'roleId', desc: false }]"
+            :is-loading="isLoading">
+            <!-- Toolbar Action Slot -->
+            <template #toolbar-actions>
+                <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
+                    <Icon icon="lucide:plus" class="w-5 h-5 stroke-[3]" />
+                    Add Role
+                </button>
+            </template>
 
+            <!-- Custom Cell Slot: 'deviceId' -->
+            <template #cell-deviceId="{ value }">
+                <span class="font-medium text-base-content/50">{{ value }}</span>
+            </template>
+
+            <!-- Custom Cell Slot: 'actions' -->
+            <template #cell-actions="{ row }">
+                <div class="flex justify-end gap-2">
+                    <button class="btn btn-sm btn-primary" @click="openEditModal(row)">
+                        <Icon icon="lucide:pencil" class="w-5 h-5" />
+                    </button>
+                </div>
+            </template>
+
+        </TableData>
         <!-- Create / Edit Modal -->
         <dialog ref="roleModal" class="modal modal-bottom sm:modal-middle">
             <div class="modal-box p-0 sm:max-w-md overflow-hidden shadow-2xl">
@@ -186,6 +174,7 @@ import { required, helpers } from '@vuelidate/validators';
 
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
+import TableData from '@/components/TableData.vue';
 
 // --- API COMPOSABLES ---
 const { data: roleAllFetch, isLoading, error: roleAllFetchError, execute: roleAllFetchApi } = useFetch();
@@ -205,6 +194,25 @@ const roleModal = ref(null);
 const isEditing = ref(false);
 const editingRoleId = ref(null);
 const isSaving = ref(false);
+
+const tableColumns = [
+    {
+        header: 'ID',
+        accessorKey: 'roleId',
+        meta: { headerClass: 'w-16', cellClass: 'font-bold' }
+    },
+    {
+        header: 'Role Name',
+        accessorKey: 'roleName',
+        meta: { headerClass: 'w-20', cellClass: 'font-bold' }
+    },
+    {
+        header: 'Actions',
+        id: 'actions',
+        enableSorting: false,
+        meta: { headerClass: 'text-right', cellClass: 'text-right' }
+    }
+];
 
 const form = ref({
     roleName: '',
@@ -244,54 +252,54 @@ const loadData = async () => {
 
 // --- HELPER ---
 const getAllPermsForMenu = (menu) => {
-  const allPerms = [];
-  
-  // 1. Get flat actions
-  if (menu.availableActions) {
-    menu.availableActions.forEach(action => {
-      allPerms.push(`${menu.menuId}-${action.actionId}`);
-    });
-  }
-  
-  // 2. Get submenu actions
-  if (menu.submenus) {
-    menu.submenus.forEach(sub => {
-      if (sub.availableActions) {
-        sub.availableActions.forEach(action => {
-          allPerms.push(`${sub.menuId}-${action.actionId}`);
+    const allPerms = [];
+
+    // 1. Get flat actions
+    if (menu.availableActions) {
+        menu.availableActions.forEach(action => {
+            allPerms.push(`${menu.menuId}-${action.actionId}`);
         });
-      }
-    });
-  }
-  
-  return allPerms;
+    }
+
+    // 2. Get submenu actions
+    if (menu.submenus) {
+        menu.submenus.forEach(sub => {
+            if (sub.availableActions) {
+                sub.availableActions.forEach(action => {
+                    allPerms.push(`${sub.menuId}-${action.actionId}`);
+                });
+            }
+        });
+    }
+
+    return allPerms;
 };
 
 // --- HELPER: Check if every action in a menu is currently selected ---
 const isAllSelected = (menu) => {
-  const allPerms = getAllPermsForMenu(menu);
-  if (allPerms.length === 0) return false;
-  
-  return allPerms.every(perm => form.value.selectedPermissions.includes(perm));
+    const allPerms = getAllPermsForMenu(menu);
+    if (allPerms.length === 0) return false;
+
+    return allPerms.every(perm => form.value.selectedPermissions.includes(perm));
 };
 
 // --- ACTION: Toggle all checkboxes on or off for a menu ---
 const toggleSelectAll = (menu) => {
-  const allPerms = getAllPermsForMenu(menu);
-  
-  if (isAllSelected(menu)) {
-    // Deselect all: Filter out the permissions that belong to this menu
-    form.value.selectedPermissions = form.value.selectedPermissions.filter(
-      perm => !allPerms.includes(perm)
-    );
-  } else {
-    // Select all: Push missing permissions into the array
-    allPerms.forEach(perm => {
-      if (!form.value.selectedPermissions.includes(perm)) {
-        form.value.selectedPermissions.push(perm);
-      }
-    });
-  }
+    const allPerms = getAllPermsForMenu(menu);
+
+    if (isAllSelected(menu)) {
+        // Deselect all: Filter out the permissions that belong to this menu
+        form.value.selectedPermissions = form.value.selectedPermissions.filter(
+            perm => !allPerms.includes(perm)
+        );
+    } else {
+        // Select all: Push missing permissions into the array
+        allPerms.forEach(perm => {
+            if (!form.value.selectedPermissions.includes(perm)) {
+                form.value.selectedPermissions.push(perm);
+            }
+        });
+    }
 };
 
 // --- MODAL ACTIONS ---

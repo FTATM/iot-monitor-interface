@@ -8,7 +8,7 @@ type Widget struct {
 	WidgetId        int         `json:"widgetId" db:"widget_id"`
 	WidgetTypeId    int         `json:"widgetTypeId" db:"widget_type_id"`
 	CanvasId        int         `json:"canvasId" db:"canvas_id"`
-	DeviceId        int         `json:"deviceId" db:"device_id"`
+	DeviceIds       []int       `json:"deviceIds" db:"device_id_s"`
 	WidgetLabel     string      `json:"widgetLabel" db:"widget_label"`
 	LayoutData      DynamicJSON `json:"layoutData" db:"layout_data"`
 	WidgetColor     DynamicJSON `json:"widgetColor" db:"widget_color"`
@@ -23,7 +23,7 @@ type UpsertWidgetReqest struct {
 type UpsertWidget struct {
 	WidgetId        int         `json:"widgetId"`
 	WidgetTypeId    int         `json:"widgetTypeId"`
-	DeviceId        int         `json:"deviceId"`
+	DeviceIds       []int       `json:"deviceIds"`
 	WidgetLabel     string      `json:"widgetLabel"`
 	LayoutData      DynamicJSON `json:"layoutData"`
 	WidgetColor     DynamicJSON `json:"widgetColor"`

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/FTATM/iot-monitor-interface/config"
+	"github.com/FTATM/iot-monitor-interface/internal/client"
 	"github.com/FTATM/iot-monitor-interface/internal/handler"
 	"github.com/FTATM/iot-monitor-interface/internal/middleware"
 	"github.com/FTATM/iot-monitor-interface/internal/model"
@@ -19,23 +20,30 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type App interface {
-	Run() error
-	Close()
-}
-
 type ServerApi struct {
-	DB     *pgxpool.Pool
-	Server *http.Server
+	DB                *pgxpool.Pool
+	Server            *http.Server
+	DeviceStartPublic func(ctx context.Context)
+	cancelBroadcaster context.CancelFunc
 }
 
 func (a *ServerApi) Run() error {
 	slog.Info(fmt.Sprintf("Server starting on %s", a.Server.Addr))
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// 2. Store the cancel function in the struct so Close() can use it
+	a.cancelBroadcaster = cancel
+	go a.DeviceStartPublic(ctx)
+
 	return a.Server.ListenAndServe()
 }
 
 func (a *ServerApi) Close() {
 	slog.Info("Executing graceful shutdown...")
+
+	if a.cancelBroadcaster != nil {
+		a.cancelBroadcaster()
+	}
 
 	if a.DB != nil {
 		a.DB.Close()
@@ -61,6 +69,13 @@ func InitializeApi(ctx context.Context) (App, error) {
 	scheduleEngineURL := os.Getenv("SCHEDULE_ENGINE_URL")
 	if scheduleEngineURL == "" {
 		slog.Error("SCHEDULE_ENGINE_URL is not set in environment")
+		os.Exit(1)
+	}
+
+	//schedul engine
+	deviceGatewayURL := os.Getenv("DEVICE_GATEWAY_URL")
+	if deviceGatewayURL == "" {
+		slog.Error("DEVICE_GATEWAY_URL is not set in environment")
 		os.Exit(1)
 	}
 
@@ -96,22 +111,23 @@ func InitializeApi(ctx context.Context) (App, error) {
 
 	//? client
 	// scheduleClient := client.NewScheduleClient(scheduleEngineURL)
+	deviceGatewayClient := client.NewDeviceGatewayClient(deviceGatewayURL)
 
 	//? service
 	widgetService := service.NewWidgetService(txManager, widgetRepo, widgetTypeRepo, canvasRepo)
-	canvasService := service.NewCanvasService(txManager, widgetRepo, canvasRepo)
+	canvasService := service.NewCanvasService(txManager, widgetRepo, canvasRepo, auditLogRepo)
 	widgetTypeService := service.NewWidgetTypeService(txManager, widgetTypeRepo)
 	userService := service.NewUserService(txManager, userRepo, jwtKey, roleRepo, auditLogRepo)
 	deviceService := service.NewDeviceService(txManager, deviceRepo, auditLogRepo)
 	roleService := service.NewRoleService(txManager, roleRepo)
 	scheduleService := service.NewScheduleService(txManager, scheduleRepo, auditLogRepo)
 
-	handlers := router.ApiHandlers{
+	handlers := router.RouterHandlers{
 		Widget:     handler.NewWidgetHandler(widgetService, roleService),
 		Canvas:     handler.NewCanvasHandler(canvasService, roleService),
 		WidgetType: handler.NewWidgetTypeHandler(widgetTypeService),
 		User:       handler.NewUserHandler(userService, roleService),
-		Device:     handler.NewDeviceHandler(deviceService, roleService),
+		Device:     handler.NewDeviceHandler(deviceService, roleService, deviceGatewayClient),
 		Role:       handler.NewRoleHandler(roleService),
 		Schedule:   handler.NewScheduleHandler(scheduleService, roleService),
 	}
@@ -163,7 +179,8 @@ func InitializeApi(ctx context.Context) (App, error) {
 	}
 
 	return &ServerApi{
-		DB:     db,
-		Server: server,
+		DB:                db,
+		Server:            server,
+		DeviceStartPublic: deviceService.StartPublic,
 	}, nil
 }

@@ -21,49 +21,36 @@
     </div>
 
     <!-- 3-Column Table -->
-    <div class="bg-base-100 rounded-box shadow-sm border border-base-200 overflow-x-auto">
-      <table class="table w-full">
-        <thead class="bg-base-200 text-base-content text-sm">
-          <tr>
-            <th class="w-1/4">Role Name</th>
-            <th class="w-2/4">Assigned Canvases</th>
-            <th class="w-1/4 text-right">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="role in rolesList" :key="role.roleId" class="hover:bg-base-200/30 transition-colors">
-            <!-- Column 1: Role Name -->
-            <td class="font-semibold text-base">{{ role.roleName }}</td>
+    <TableData :data="roleTable" :columns="tableColumns" :initial-sorting="[{ id: 'roleName', desc: false }]"
+      :is-loading="isRolesLoading">
+      <!-- Custom Cell Slot: 'canvasId' -->
+      <template #cell-roleName="{ value }">
+        <span class="">{{ value }}</span>
+      </template>
 
-            <!-- Column 2: Canvas Badges -->
-            <td>
-              <div class="flex flex-wrap gap-2">
-                <span v-for="canvasId in getAssignedCanvases(role.roleId)" :key="canvasId"
-                  class="badge badge-primary badge-outline badge-sm font-medium">
-                  {{ getCanvasName(canvasId) }}
-                </span>
+      <template #cell-assignedCanvases="{ row }">
+        <div class="flex flex-wrap gap-2">
+          <span v-for="canvasId in getAssignedCanvases(row.roleId)" :key="canvasId"
+            class="badge badge-primary badge-outline badge-sm font-medium">
+            {{ getCanvasName(canvasId) }}
+          </span>
 
-                <span v-if="getAssignedCanvases(role.roleId).length === 0" class="text-base-content/40 text-sm italic">
-                  No access granted
-                </span>
-              </div>
-            </td>
+          <span v-if="getAssignedCanvases(row.roleId).length === 0" class="text-base-content/40 text-sm italic">
+            No access granted
+          </span>
+        </div>
+      </template>
 
-            <!-- Column 3: Action Button -->
-            <td class="text-right">
-              <button @click="openEditModal(role)" class="btn btn-sm btn-primary">
-                <Icon icon="lucide:pencil" class="w-5 h-5" />
-              </button>
-            </td>
-          </tr>
+      <!-- Custom Cell Slot: 'actions' -->
+      <template #cell-actions="{ row }">
+        <div class="flex justify-end gap-2">
+          <button @click="openEditModal(row)" class="btn btn-sm btn-primary">
+            <Icon icon="lucide:pencil" class="w-5 h-5" />
+          </button>
+        </div>
+      </template>
 
-          <!-- Empty State -->
-          <tr v-if="rolesList.length === 0 && !isRolesLoading">
-            <td colspan="3" class="text-center py-8 text-base-content/50">No roles found.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    </TableData>
 
     <!-- Edit Access Modal -->
     <dialog ref="editModal" class="modal z-[200]">
@@ -114,6 +101,7 @@ import { toast } from 'vue3-toastify';
 import { Icon } from '@iconify/vue';
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
+import TableData from '@/components/TableData.vue';
 
 // --- COMPOSABLES ---
 const { data: roleData, isLoading: isRolesLoading, error: roleError, execute: fetchRolesApi } = useFetch();
@@ -126,7 +114,7 @@ const permissionStore = usePermissionStore();
 const { hasPermission } = permissionStore;
 
 // --- STATE ---
-const rolesList = ref([]);
+const roleTable = ref([]);
 const canvasList = ref([]);
 const roleCanvasMap = ref(new Map()); // Map: roleId -> Array of canvasIds
 
@@ -134,11 +122,29 @@ const editModal = ref(null);
 const editingRole = ref(null);
 const selectedCanvases = ref([]); // Holds the checkbox selections in the modal
 
+const tableColumns = [
+  {
+    header: 'Role Name',
+    accessorKey: 'roleName'
+  },
+  {
+    header: 'Assigned Canvases',
+    id: 'assignedCanvases',
+    enableSorting: false,
+  },
+  {
+    header: 'Actions',
+    id: 'actions', // Use 'id' when there isn't a direct data key
+    enableSorting: false,
+    meta: { headerClass: 'text-right', cellClass: 'text-right' }
+  }
+];
+
 // --- DATA LOADING ---
 const setupData = async () => {
   await fetchRolesApi('/role/getall');
   if (!roleError.value && roleData.value) {
-    rolesList.value = roleData.value.data;
+    roleTable.value = roleData.value.data;
   } else {
     toast.error("Failed to load roles");
   }

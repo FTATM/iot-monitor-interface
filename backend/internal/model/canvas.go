@@ -6,10 +6,18 @@ import (
 )
 
 type Canvas struct {
-	CanvasId   int        `json:"canvasId" db:"canvas_id"`
-	CanvasName string     `json:"canvasName" db:"canvas_name"`
-	CreatedAt  time.Time  `json:"-" db:"created_at"`
-	DeletedAt  *time.Time `json:"-" db:"deleted_at"`
+	CanvasId   int       `json:"canvasId" db:"canvas_id"`
+	CanvasName string    `json:"canvasName" db:"canvas_name"`
+	CreatedAt  time.Time `json:"-" db:"created_at"`
+}
+
+func (s *Canvas) IsSame(req Canvas) bool {
+	if s == nil {
+		return false
+	}
+
+	return s.CanvasId == req.CanvasId &&
+		s.CanvasName == req.CanvasName
 }
 
 type CanvasDetail struct {
@@ -28,6 +36,10 @@ type UpsertCanvasRole struct {
 	CanvasIds []int `json:"canvasIds"`
 }
 
+type CreateCanvas struct {
+	CanvasName string `json:"canvasName"`
+}
+
 type CanvasRepository interface {
 	GetAll(ctx context.Context, active bool) ([]Canvas, error)
 	GetById(ctx context.Context, id int) (*Canvas, error)
@@ -38,6 +50,10 @@ type CanvasRepository interface {
 	GetCanvasRoleByRoleId(ctx context.Context, roleId int) ([]int, error)
 	CreateCanvasRole(ctx context.Context, canvasroles []CanvasRole) error
 	DeleteCanvasRole(ctx context.Context, canvasroles []CanvasRole) error
+	Create(ctx context.Context, canvas *Canvas) error
+	Update(ctx context.Context, canvas *Canvas) error
+	Delete(ctx context.Context, canvasId int) error
+	CountValidate(ctx context.Context, canvas *Canvas) (int, error)
 }
 
 type CanvasService interface {
@@ -46,4 +62,7 @@ type CanvasService interface {
 	GetAllCanvasDetailByUserRole(ctx context.Context, authUserId int) ([]CanvasDetail, error)
 	GetAllCanvasRoleDetail(ctx context.Context) ([]CanvasRoleDetail, error)
 	UpsertCanvasRole(ctx context.Context, upsertCanvasRole *UpsertCanvasRole, authUserId int) error
+	CreateCanvas(ctx context.Context, createCanvas *CreateCanvas, authUserId int) error
+	UpdateCanvas(ctx context.Context, updateCanvas *UpdateCanvas, authUserId int) error
+	DeleteCanvas(ctx context.Context, canvasId int, authUserId int) error
 }

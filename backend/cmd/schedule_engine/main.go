@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -82,9 +83,22 @@ func initLogger() {
 		RotateAt:         []string{"00:00"},                                // Force rotation exactly at midnight
 	}
 
+	logLevelStr := os.Getenv("LOG_SCHEDULE_ENGINE_LEVEL")
+	var logLevel slog.Level
+	switch strings.ToLower(logLevelStr) {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn", "warning":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo // Default fallback for production
+	}
+
 	// Configure slog options
 	opts := &slog.HandlerOptions{
-		Level:     slog.LevelInfo,
+		Level:     logLevel,
 		AddSource: true,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			// Clean up the "source" file path so it's not overly long

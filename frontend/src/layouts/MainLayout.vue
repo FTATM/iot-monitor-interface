@@ -54,10 +54,16 @@
               Dashboard
             </router-link>
           </li>
-          <li v-if="hasPermission('Canvas Design', 'Display') || hasPermission('Canvas Access', 'Display')">
+          <li v-if="hasPermission('Canvas Design', 'Display') || hasPermission('Canvas Access', 'Display') || hasPermission('Canvas', 'Display')">
             <details>
               <summary>Canvas Management</summary>
               <ul>
+                <li v-if="hasPermission('Canvas', 'Display')">
+                  <router-link :to="{ name: 'canvas' }" active-class="!text-orange-600 !bg-orange-100 font-bold"
+                    @click="isSidebarOpen = false">
+                    Canvas
+                  </router-link>
+                </li>
                 <li v-if="hasPermission('Canvas Design', 'Display')">
                   <router-link :to="{ name: 'canvasDesign' }" active-class="!text-orange-600 !bg-orange-100 font-bold"
                     @click="isSidebarOpen = false">
@@ -134,20 +140,27 @@ const router = useRouter();
 
 // --- STORE ---
 const permissionStore = usePermissionStore();
-const { hasPermission } = permissionStore;
+const { hasPermission,setPermissions } = permissionStore;
 const userStore = useUserStore();
 const { setUser } = userStore;
 
 const { res: logoutRes, execute: logoutApi } = useMutation();
 
 const handleLogout = async () => {
-  await logoutApi('/user/logout', null, 'POST');
+  try {
+    // 1. Attempt to notify the server
+    await logoutApi('/user/logout', null, 'POST');
 
-  if (!logoutRes.value.ok) {
-    // Fixed reference error (previously logged undefined 'error' variable)
-    console.error("Logout failed. Response not OK.");
-  } else {
-    setUser(null)
+    if (!logoutRes.value.ok) {
+      console.warn("Server-side logout failed (Response not OK), but proceeding with local logout.");
+    }
+  } catch (error) {
+    // Catch actual network errors (e.g., server is shut down, no internet)
+    console.error("Network error during logout:", error);
+  } finally {
+    // 2. ALWAYS clear local state and redirect, regardless of server status
+    setUser(null);
+    setPermissions(null);
     router.push('/login');
   }
 };

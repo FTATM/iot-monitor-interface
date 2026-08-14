@@ -38,10 +38,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch, onUnmounted } from 'vue'; // ⚡ ADDED: watch and onUnmounted
 import { GridLayout, GridItem } from 'grid-layout-plus';
 import { useFetch } from '@/composables/useFetch';
 import { toast } from 'vue3-toastify';
+
+// ⚡ ADDED: Import the master SSE store
+import { useLiveStreamStore } from '@/stores/useLiveStreamStore';
 
 import BarChart from '@/components/widgets/BarChart.vue';
 import BulletChart from '@/components/widgets/BulletChart.vue';
@@ -69,6 +72,9 @@ const widgetMap = {
   'Text':Text,
 };
 
+// ⚡ ADDED: Initialize the store
+const liveStreamStore = useLiveStreamStore();
+
 const allUserCanvasesMap = ref(new Map());
 const activeCanvasId = ref(null);
 const activeLayout = ref([]);
@@ -88,7 +94,9 @@ const loadUserCanvas = async () => {
           x: widget.layoutData.x, y: widget.layoutData.y, w: widget.layoutData.w, h: widget.layoutData.h,
           i: widget.widgetId ? widget.widgetId.toString() : index.toString(),
           widgetTypeName: typeInfo ? typeInfo.widgetTypeName : '',
-          widgetId: widget.widgetId, widgetTypeId: widget.widgetTypeId, deviceId: widget.deviceId || 0,
+          
+          widgetId: widget.widgetId, widgetTypeId: widget.widgetTypeId, deviceIds: widget.deviceIds || [],
+          
           widgetLabel: widget.widgetLabel || '', widgetColor: widget.widgetColor || { bgHex: '', textHex: '', chartHex: '' },
           customChartData: widget.customChartData || {}
         };
@@ -126,4 +134,22 @@ onMounted(async () => {
   await setupData();
   await loadUserCanvas();
 });
+
+// ⚡ ADDED: Unmount hook to close the master connection
+onUnmounted(() => {
+  liveStreamStore.disconnect();
+});
+
+// ⚡ ADDED: Watcher to trigger the central store when the layout loads or changes
+watch(activeLayout, (newLayout) => {
+  const allIds = [];
+  newLayout.forEach(widget => {
+    if (widget.deviceIds && widget.deviceIds.length > 0) {
+      // Ensure we convert them to strings to match the store keys perfectly
+      allIds.push(...widget.deviceIds.map(String));
+    }
+  });
+  liveStreamStore.setRequiredDevices(allIds);
+}, { deep: true, immediate: true }); // ⚡ immediate: true is crucial here!
+
 </script>

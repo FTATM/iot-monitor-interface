@@ -1,0 +1,17 @@
+package model
+
+import "context"
+
+type ScheduleEngineRepository interface {
+	GetById(ctx context.Context, id string) (*Schedule, error)
+	UpdateStatus(ctx context.Context, id, status string) error
+	UpdateLastRun(ctx context.Context, id string) error
+	GetActiveSchedules(ctx context.Context) ([]Schedule, error)
+}
+
+type ScheduleEngineService interface {
+	SyncJob(ctx context.Context, id string) error
+	CancelJob(schedID string) bool
+	Start(ctx context.Context) error
+	Stop()
+}

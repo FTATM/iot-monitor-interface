@@ -14,6 +14,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080', // Your local Go backend
         changeOrigin: true,
+        ws: true,
         // This rewrite function does EXACTLY what your Nginx trailing slash does
         // It changes http://localhost:5173/api/users -> http://localhost:8080/users
         rewrite: (path) => path.replace(/^\/api/, '')

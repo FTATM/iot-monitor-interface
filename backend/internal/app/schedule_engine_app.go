@@ -97,7 +97,7 @@ func InitializeScheduleEngine(ctx context.Context) (App, error) {
 		os.Exit(1)
 	}
 
-	handlers := router.ApiHandlers{
+	handlers := router.RouterHandlers{
 		ScheduleEngine: handler.NewScheduleEngineHandler(scheduleService),
 	}
 

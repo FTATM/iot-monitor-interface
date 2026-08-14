@@ -114,7 +114,7 @@
 
     <!-- Config Modal -->
     <dialog ref="configModal" class="modal z-[200]">
-      <div class="modal-box max-w-2xl min-h-[450px] flex flex-col p-0">
+      <div class="modal-box max-w-2xl min-h-[450px] max-h-[85vh] flex flex-col p-0">
         <div class="px-6 pt-6 pb-2 relative">
           <button
             class="btn btn-sm btn-circle btn-ghost absolute right-4 top-4 text-base-content/50 hover:text-error hover:bg-error/10"
@@ -144,14 +144,24 @@
                 <div class="label pb-1"><span class="label-text font-bold">Widget Label</span></div>
                 <input type="text" v-model="configForm.widgetLabel" class="input input-bordered input-sm w-full" />
               </label>
-              <label class="form-control w-full">
-                <div class="label pb-1"><span class="label-text font-bold">Data Source (Device ID)</span></div>
-                <select v-model="configForm.deviceId" class="select select-bordered select-sm w-full">
-                  <option disabled :value="0">Select a device...</option>
-                  <option :value="1">Main Server</option>
-                  <option :value="2">Database Cluster</option>
-                </select>
+              <label v-if="deviceSelectionMode !== 'none'" class="form-control w-full">
+                <div class="label pb-1">
+                  <span class="label-text font-bold">Data Source Devices</span>
+                  <!-- Visual helper for the user -->
+                  <span v-if="deviceSelectionMode === 'single'" class="label-text-alt text-error font-semibold">Select 1
+                    device</span>
+                  <span v-else class="label-text-alt text-primary font-semibold">Multiple allowed</span>
+                </div>
+
+                <!-- ⚡ Bind to syncDeviceIds and conditionally set :multiple -->
+                <SearchableDropdown v-model="syncDeviceIds" :multiple="deviceSelectionMode === 'multiple'"
+                  :options="Array.from(deviceMasterMap.values())" label-key="deviceName" value-key="deviceId"
+                  placeholder="Search for devices..." />
               </label>
+              <div v-else
+                class="form-control w-full p-4 bg-base-200/50 rounded-lg border border-base-200 text-center text-sm text-base-content/60">
+                This widget type does not require any data source devices.
+              </div>
               <label class="form-control w-full mt-2 items-center cursor-pointer">
                 <div class="label pb-1 w-full"><span class="label-text font-bold">Panel Background Color</span></div>
                 <input type="color" v-model="configForm.widgetColor.bgHex"
@@ -180,13 +190,17 @@
           </div>
           <div v-if="widgetConfigComponentMap[configForm.widgetTypeName]" v-show="activeTab === 'chart'">
             <component :is="widgetConfigComponentMap[configForm.widgetTypeName]"
-              :modelValue="configForm.customChartData" :key="widgetToConfig"
+              :modelValue="configForm.customChartData" :key="widgetToConfig" :selected-device-ids="configForm.deviceIds"
+              :all-devices="Array.from(deviceMasterMap.values())"
               @update:modelValue="(val) => configForm.customChartData = val" />
           </div>
         </div>
         <div class="px-6 py-4 border-t border-base-200 bg-base-100 flex justify-end gap-3 rounded-b-box">
           <button type="button" @click="closeConfigModal" class="btn btn-ghost">Cancel</button>
-          <button type="button" @click="saveConfig" class="btn btn-primary text-white px-8">Save Settings</button>
+          <button type="button" @click="saveConfig" class="btn btn-primary text-white px-8"
+            :disabled="configForm.customChartData?._isInvalid">
+            Save Settings
+          </button>
         </div>
       </div>
       <form method="dialog" class="modal-backdrop"><button @click="closeConfigModal">close</button></form>
@@ -195,7 +209,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { useLiveStreamStore } from '@/stores/useLiveStreamStore';
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue';
 import { GridLayout, GridItem } from 'grid-layout-plus';
 import { useFetch } from '@/composables/useFetch';
 import { useMutation } from '@/composables/useMutation';
@@ -204,6 +219,8 @@ import { usePermissionStore } from '@/stores/usePermissionStore';
 import { Icon } from '@iconify/vue';
 
 import NoAccess from '@/components/NoAccess.vue';
+import SearchableDropdown from '@/components/SearchableDropdown.vue';
+
 import BarChart from '@/components/widgets/BarChart.vue';
 import BarChartConfig from '@/components/widgets/BarChartConfig.vue';
 import BulletChart from '@/components/widgets/BulletChart.vue';
@@ -258,6 +275,7 @@ const widgetConfigComponentMap = {
 // --- STORE ---
 const permissionStore = usePermissionStore();
 const { hasPermission } = permissionStore;
+const liveStreamStore = useLiveStreamStore();
 
 const availableTools = ref([
   { type: 'BarChart', name: 'Bar Chart', icon: 'lucide:bar-chart-3' },
@@ -281,7 +299,8 @@ const draggedWidgetTypeName = ref(null);
 const contextMenu = ref({ show: false, x: 0, y: 0, widgetId: null });
 const deleteModal = ref(null);
 const configModal = ref(null);
-const configForm = ref({ widgetLabel: '', deviceId: 0, widgetColor: { bgHex: '', textHex: '', chartHex: '' }, layoutData: { x: 0, y: 0, w: 4, h: 8 }, customChartData: {} });
+// ⚡ FIX: Updated configForm to initialize deviceIds as an array
+const configForm = ref({ widgetLabel: '', deviceIds: [], widgetColor: { bgHex: '', textHex: '', chartHex: '' }, layoutData: { x: 0, y: 0, w: 4, h: 8 }, customChartData: {} });
 const widgetToDelete = ref(null);
 const widgetToConfig = ref(null);
 
@@ -289,10 +308,50 @@ const allUserCanvasesMap = ref(new Map());
 const activeCanvasId = ref(null);
 const activeLayout = ref([]);
 const widgetTypeMasterMap = new Map();
+const deviceMasterMap = new Map();
 
 const { data: widgetTypeMasterData, error: widgetTypeMasterError, execute: widgetTypeMasterApi } = useFetch();
 const { data: userAllCanvasFetchData, error: userAllCanvasFetchError, execute: userAllCanvasFetchApi } = useFetch();
+const { data: deviceAllNameData, error: deviceAllNameFetchError, execute: deviceAllNameFetchApi } = useFetch();
 const { res: upsertRes, error: upsertError, execute: upsertWidgetApi } = useMutation();
+
+const deviceSelectionMode = computed(() => {
+  const type = configForm.value.widgetTypeName;
+
+  // Widgets that do not need any devices
+  if (['Text'].includes(type)) {
+    return 'none';
+  }
+
+  // Widgets that strictly use index 0 (Single device)
+  if (['GaugeChart', 'BulletChart', 'Status'].includes(type)) {
+    return 'single';
+  }
+
+  // Default to multiple (BarProcess, Table, BarChart, PieChart, etc.)
+  return 'multiple';
+});
+
+// 2. The translator: Keeps the dropdown happy while enforcing the array structure
+const syncDeviceIds = computed({
+  get() {
+    if (deviceSelectionMode.value === 'single') {
+      // If single mode, extract the first item to pass to the dropdown
+      return configForm.value.deviceIds?.length > 0 ? configForm.value.deviceIds[0] : null;
+    }
+    // If multiple mode, just pass the array
+    return configForm.value.deviceIds || [];
+  },
+  set(newValue) {
+    if (deviceSelectionMode.value === 'single') {
+      // If single mode, wrap the single string/number selection back into an array
+      configForm.value.deviceIds = newValue ? [newValue] : [];
+    } else {
+      // If multiple mode, it's already an array
+      configForm.value.deviceIds = newValue || [];
+    }
+  }
+});
 
 const loadUserCanvas = async () => {
   await userAllCanvasFetchApi('/canvas/getalldetailbyuser');
@@ -305,7 +364,7 @@ const loadUserCanvas = async () => {
           x: widget.layoutData.x, y: widget.layoutData.y, w: widget.layoutData.w, h: widget.layoutData.h,
           i: widget.widgetId ? widget.widgetId.toString() : index.toString(),
           widgetTypeName: typeInfo ? typeInfo.widgetTypeName : '',
-          widgetId: widget.widgetId, widgetTypeId: widget.widgetTypeId, deviceId: widget.deviceId || 0,
+          widgetId: widget.widgetId, widgetTypeId: widget.widgetTypeId, deviceIds: widget.deviceIds || [],
           widgetLabel: widget.widgetLabel || '', widgetColor: widget.widgetColor || { bgHex: '', textHex: '', chartHex: '' },
           customChartData: widget.customChartData || {}
         };
@@ -333,15 +392,26 @@ const loadCurrentCanvas = () => {
 const setupData = async () => {
   await widgetTypeMasterApi('/widgettype/getall');
   if (!widgetTypeMasterError.value && widgetTypeMasterData.value) {
-    for (let i of widgetTypeMasterData.value.data) widgetTypeMasterMap.set(i.widgetTypeId, i);
+    for (let i of widgetTypeMasterData.value.data) {
+      widgetTypeMasterMap.set(i.widgetTypeId, i);
+    }
   } else if (widgetTypeMasterError.value) {
     toast.error("Failed to load widget types");
+  }
+  await deviceAllNameFetchApi('/device/getalldevicename')
+  if (!deviceAllNameFetchError.value && deviceAllNameData.value) {
+    for (let i of deviceAllNameData.value.data) {
+      deviceMasterMap.set(i.deviceId, i);
+    }
+  } else if (deviceAllNameFetchError.value) {
+    toast.error("Failed to load device");
   }
 };
 
 const saveCurrentCanvas = async () => {
   const widgetsList = activeLayout.value.map(item => ({
-    widgetId: item.widgetId || 0, widgetTypeId: item.widgetTypeId || 0, deviceId: item.deviceId || 0,
+    // ⚡ FIX: Send deviceIds array to Go backend
+    widgetId: item.widgetId || 0, widgetTypeId: item.widgetTypeId || 0, deviceIds: item.deviceIds || [],
     widgetLabel: item.widgetLabel || 'New Widget', layoutData: { x: item.x, y: item.y, w: item.w, h: item.h },
     widgetColor: item.widgetColor, customChartData: item.customChartData
   }));
@@ -405,7 +475,8 @@ const onDrop = () => {
     for (let [id, typeObj] of widgetTypeMasterMap.entries()) {
       if (typeObj.widgetTypeName === newItem.widgetTypeName) { foundTypeId = id; break; }
     }
-    newItem.widgetTypeId = foundTypeId; newItem.widgetId = 0; newItem.deviceId = 0;
+    // ⚡ FIX: Initialize new widgets with an empty deviceIds array
+    newItem.widgetTypeId = foundTypeId; newItem.widgetId = 0; newItem.deviceIds = [];
     newItem.widgetLabel = `New ${newItem.widgetTypeName}`;
     newItem.widgetColor = { bgHex: '#ffffff', textHex: '#334155', chartHex: '#3b82f6' };
     newItem.customChartData = {};
@@ -427,13 +498,24 @@ const promptConfig = () => {
   widgetToConfig.value = contextMenu.value.widgetId;
   closeContextMenu();
   const widget = activeLayout.value.find(item => item.i === widgetToConfig.value);
+
   if (widget) {
     configForm.value = {
-      widgetLabel: widget.widgetLabel || '', deviceId: widget.deviceId || 0, widgetTypeId: widget.widgetTypeId || 0,
-      widgetTypeName: widget.widgetTypeName, widgetColor: widget.widgetColor || { bgHex: '#ffffff', textHex: '#334155', chartHex: '#3b82f6' },
-      layoutData: { x: widget.x, y: widget.y, w: widget.w, h: widget.h }, customChartData: widget.customChartData || {}
+      widgetLabel: widget.widgetLabel || '',
+      deviceIds: [...(widget.deviceIds || [])],
+      widgetTypeId: widget.widgetTypeId || 0,
+      widgetTypeName: widget.widgetTypeName,
+
+      // ⚡ THE FIX: Use JSON.parse/stringify to deep clone the color object
+      widgetColor: JSON.parse(JSON.stringify(widget.widgetColor || { bgHex: '#ffffff', textHex: '#334155', chartHex: '#3b82f6' })),
+
+      layoutData: { x: widget.x, y: widget.y, w: widget.w, h: widget.h },
+
+      // ⚡ THE FIX: Deep clone the custom chart data so it doesn't mutate the live widget
+      customChartData: JSON.parse(JSON.stringify(widget.customChartData || {}))
     };
   }
+
   activeTab.value = 'general';
   configModal.value.showModal();
 };
@@ -442,15 +524,27 @@ const closeConfigModal = () => { configModal.value.close(); widgetToConfig.value
 
 const saveConfig = () => {
   const widgetIndex = activeLayout.value.findIndex(item => item.i === widgetToConfig.value);
+
   if (widgetIndex !== -1) {
     const updatedItem = {
-      ...activeLayout.value[widgetIndex], widgetLabel: configForm.value.widgetLabel, deviceId: configForm.value.deviceId,
-      widgetColor: { ...configForm.value.widgetColor }, customChartData: JSON.parse(JSON.stringify(configForm.value.customChartData))
+      ...activeLayout.value[widgetIndex],
+      widgetLabel: configForm.value.widgetLabel,
+      deviceIds: [...configForm.value.deviceIds],
+      widgetColor: { ...configForm.value.widgetColor },
+      customChartData: JSON.parse(JSON.stringify(configForm.value.customChartData)),
     };
-    updatedItem.x = Number(configForm.value.layoutData.x); updatedItem.y = Number(configForm.value.layoutData.y);
-    updatedItem.w = Number(configForm.value.layoutData.w); updatedItem.h = Number(configForm.value.layoutData.h);
-    activeLayout.value.splice(widgetIndex, 1, updatedItem);
+
+    updatedItem.x = Number(configForm.value.layoutData.x);
+    updatedItem.y = Number(configForm.value.layoutData.y);
+    updatedItem.w = Number(configForm.value.layoutData.w);
+    updatedItem.h = Number(configForm.value.layoutData.h);
+
+    // ⚡ THE FIX: Create a brand new array reference to force deep reactivity
+    const newLayout = [...activeLayout.value];
+    newLayout[widgetIndex] = updatedItem;
+    activeLayout.value = newLayout;
   }
+
   closeConfigModal();
 };
 
@@ -458,9 +552,25 @@ onMounted(async () => {
   await setupData();
   await loadUserCanvas();
 });
+
+onUnmounted(() => {
+  liveStreamStore.disconnect();
+});
+
+watch(activeLayout, (newLayout) => {
+  const allIds = [];
+  newLayout.forEach(widget => {
+    if (widget.deviceIds && widget.deviceIds.length > 0) {
+      allIds.push(...widget.deviceIds);
+    }
+  });
+  liveStreamStore.setRequiredDevices(allIds);
+}, { deep: true, immediate: true });
+
 </script>
 
 <style scoped>
+/* ... your existing styles stay exactly the same ... */
 @keyframes slideDown {
   from {
     opacity: 0;

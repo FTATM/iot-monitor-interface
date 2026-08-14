@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-full w-full p-4" :style="{ backgroundColor: widgetData.widgetColor?.bgHex || '#ffffff' }">
+  <div class="flex flex-col h-full w-full p-4 overflow-hidden" :style="{ backgroundColor: widgetData.widgetColor?.bgHex || '#ffffff' }">
     
     <div class="bg-white px-4 py-3 border border-slate-200 shadow-sm z-10">
       <h3 class="m-0 text-base font-extrabold text-black tracking-wide">
@@ -7,8 +7,22 @@
       </h3>
     </div>
 
-    <div class="flex-1 w-full min-h-[150px] relative">
-      <v-chart v-if="isReady" class="absolute inset-0 w-full h-full" :option="chartOption" autoresize />
+    <div class="flex-1 w-full min-h-[150px] relative mt-2 flex flex-col justify-center">
+      
+      <!-- 1. No Devices Selected State -->
+      <div v-if="!hasDevices" class="absolute inset-0 flex items-center justify-center text-sm text-base-content/50 italic text-center p-4">
+        No devices selected. Open configuration to add data sources.
+      </div>
+
+      <!-- 2. Loading State -->
+      <div v-else-if="!hasData" class="absolute inset-0 flex flex-col items-center justify-center text-sm text-base-content/50 gap-3">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+        Waiting for live data...
+      </div>
+
+      <!-- 3. Actual Chart -->
+      <v-chart v-else-if="isReady" class="absolute inset-0 w-full h-full" :option="chartOption" autoresize />
+
     </div>
   </div>
 </template>
@@ -17,12 +31,14 @@
 import { computed, ref, onMounted, nextTick } from 'vue';
 import VChart from 'vue-echarts';
 
+// ⚡ Import the shared store
+import { useLiveStreamStore } from '@/stores/useLiveStreamStore';
+
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { PieChart } from 'echarts/charts';
 import { TooltipComponent, LegendComponent } from 'echarts/components';
 
-// Register the required ECharts components for a pie chart
 use([CanvasRenderer, PieChart, TooltipComponent, LegendComponent]);
 
 const props = defineProps({
@@ -34,6 +50,17 @@ const props = defineProps({
 
 const isReady = ref(false);
 
+// ⚡ Initialize the store
+const liveStreamStore = useLiveStreamStore();
+
+const hasDevices = computed(() => props.widgetData?.deviceIds && props.widgetData.deviceIds.length > 0);
+
+// ⚡ Read directly from the central store instead of a local map
+const hasData = computed(() => {
+  const ids = props.widgetData?.deviceIds || [];
+  return ids.some(id => liveStreamStore.liveData[id] !== undefined);
+});
+
 onMounted(async () => {
   await nextTick();
   setTimeout(() => {
@@ -44,11 +71,28 @@ onMounted(async () => {
 const chartOption = computed(() => {
   const customData = props.widgetData?.customChartData || {};
 
-  // Extract custom values or use Doughnut fallbacks
   const showLegend = customData.showLegend !== undefined ? customData.showLegend : true;
   const innerRadius = customData.innerRadius || '40%';
   const outerRadius = customData.outerRadius || '70%';
   const borderRadius = customData.borderRadius !== undefined ? customData.borderRadius : 5;
+  const deviceColorsMap = customData.deviceColors || {};
+  const fallbackColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+  const rawDeviceIds = props.widgetData?.deviceIds || [];
+  
+  let dynamicData = [];
+  rawDeviceIds.forEach((id, index) => {
+    // ⚡ Read directly from the central store!
+    const dataObj = liveStreamStore.liveData[id];
+    
+    dynamicData.push({
+      name: dataObj ? dataObj.name : `Device Loading...`,
+      value: dataObj ? dataObj.value : 0,
+      itemStyle: {
+        color: deviceColorsMap[id] || fallbackColors[index % fallbackColors.length]
+      }
+    });
+  });
 
   return {
     tooltip: {
@@ -63,35 +107,18 @@ const chartOption = computed(() => {
       {
         name: 'Data',
         type: 'pie',
-        // The first value is the inner hole, the second is the outer edge
         radius: [innerRadius, outerRadius],
         itemStyle: {
           borderRadius: borderRadius,
           borderColor: '#fff',
           borderWidth: 2
         },
-        label: {
-          show: false,
-          position: 'center'
-        },
+        label: { show: false, position: 'center' },
         emphasis: {
-          label: {
-            show: true,
-            fontSize: 16,
-            fontWeight: 'bold'
-          }
+          label: { show: true, fontSize: 16, fontWeight: 'bold' }
         },
-        labelLine: {
-          show: false
-        },
-        // Hardcoded dummy data for now
-        data: [
-          { value: 1048, name: 'System' },
-          { value: 735, name: 'Database' },
-          { value: 580, name: 'Cache' },
-          { value: 484, name: 'Logs' },
-          { value: 300, name: 'Other' }
-        ]
+        labelLine: { show: false },
+        data: dynamicData
       }
     ]
   };

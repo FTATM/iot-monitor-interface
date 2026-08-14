@@ -39,6 +39,10 @@ func (rec *responseRecorder) Write(b []byte) (int, error) {
 	return rec.ResponseWriter.Write(b)
 }
 
+func (rec *responseRecorder) Unwrap() http.ResponseWriter {
+	return rec.ResponseWriter
+}
+
 func LoggingApi(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

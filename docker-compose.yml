@@ -14,9 +14,16 @@ services:
       - .env
     environment:
       - DB_HOST=db
+      - SCHEDULE_ENGINE_URL=http://server-schedule-engine:8081
+      - DEVICE_GATEWAY_URL=http://server-device-gateway:8091
     volumes:
       # host_machine_folder : container_folder
       - ./backend/local_logs/api:/app/logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "2m"
+        max-file: "2"
   server-schedule-engine:
     build:
       context: ./backend
@@ -31,9 +38,39 @@ services:
       - .env
     environment:
       - DB_HOST=db
+      - DEVICE_GATEWAY_URL=http://server-device-gateway:8091
     volumes:
       # host_machine_folder : container_folder
       - ./backend/local_logs/schedule:/app/logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "2m"
+        max-file: "2"
+  server-device-gateway:
+    build:
+      context: ./backend
+      dockerfile: cmd/device_gateway/Dockerfile
+    ports:
+      - "8090:8090"     # TCP
+      - "8090:8090/udp" # UDP
+      - "8091:8091" # HTTP (Telemetry, Polling, and Internal API)
+    restart: unless-stopped
+    depends_on:
+      - db
+      - mqtt-broker
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - MQTT_BROKER_URL=tcp://mqtt-broker:1883
+    volumes:
+      - ./backend/local_logs/gateway:/app/logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "2m"
+        max-file: "2"
   frontend:
     build: ./frontend
     ports:
@@ -41,9 +78,29 @@ services:
     depends_on:
       - server-api
     restart: unless-stopped
-    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "2m"
+        max-file: "2"
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    ports:
+      # Expose MQTT standard port to the outside world for devices
+      - "1883:1883" 
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - mosquitto_data:/mosquitto/data
+    restart: unless-stopped
+    depends_on:
+      - db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   db:
-    image: postgres:18.4-alpine
+    image: timescale/timescaledb:latest-pg18
     environment:
       POSTGRES_USER: "${DB_USER:?error: DB_USER not set}"
       POSTGRES_PASSWORD: "${DB_PASSWORD:?error: DB_PASSWORD not set}"
@@ -62,6 +119,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   iotmonitor_postgres_data:
+  mosquitto_data:
