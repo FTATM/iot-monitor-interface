@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/FTATM/iot-monitor-interface/config"
@@ -24,30 +25,31 @@ type ServerApi struct {
 	DB                *pgxpool.Pool
 	Server            *http.Server
 	DeviceStartPublic func(ctx context.Context)
-	cancelBroadcaster context.CancelFunc
 }
 
-func (a *ServerApi) Run() error {
+func (a *ServerApi) Run(ctx context.Context) error {
 	slog.Info(fmt.Sprintf("Server starting on %s", a.Server.Addr))
-	ctx, cancel := context.WithCancel(context.Background())
 
-	// 2. Store the cancel function in the struct so Close() can use it
-	a.cancelBroadcaster = cancel
 	go a.DeviceStartPublic(ctx)
 
 	return a.Server.ListenAndServe()
 }
 
-func (a *ServerApi) Close() {
+func (a *ServerApi) Close(ctx context.Context) {
 	slog.Info("Executing graceful shutdown...")
 
-	if a.cancelBroadcaster != nil {
-		a.cancelBroadcaster()
+	// 1. Shut down the HTTP server FIRST
+	if a.Server != nil {
+		if err := a.Server.Shutdown(ctx); err != nil {
+			slog.Error("API HTTP server shutdown error", slog.String("error", err.Error()))
+		}
 	}
 
+	// 2. Close the database ONLY AFTER the server has stopped processing requests
 	if a.DB != nil {
 		a.DB.Close()
 	}
+
 	slog.Info(fmt.Sprintf("Server successfully stopped on %s", a.Server.Addr))
 }
 
@@ -61,41 +63,59 @@ func InitializeApi(ctx context.Context) (App, error) {
 		Port:     os.Getenv("DB_PORT"),
 	}
 
+	// Create a context for the connection timeout
+	dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Initialize the connection pool
+	db, err := pgxpool.New(dbCtx, dbConfig.ConnectString())
+	if err != nil {
+		slog.Error("Unable to initialize database pool", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	if err := db.Ping(dbCtx); err != nil {
+		slog.Error("Database is unreachable", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	slog.Info("Database connected!")
+
 	// JWT
 	jwtSecret := os.Getenv("JWT_SECRET")
 	jwtKey := []byte(jwtSecret)
 
-	//schedul engine
 	scheduleEngineURL := os.Getenv("SCHEDULE_ENGINE_URL")
 	if scheduleEngineURL == "" {
 		slog.Error("SCHEDULE_ENGINE_URL is not set in environment")
 		os.Exit(1)
 	}
 
-	//schedul engine
 	deviceGatewayURL := os.Getenv("DEVICE_GATEWAY_URL")
 	if deviceGatewayURL == "" {
 		slog.Error("DEVICE_GATEWAY_URL is not set in environment")
 		os.Exit(1)
 	}
 
-	// Create a context for the connection timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	internalSecret := os.Getenv("INTERNAL_API_SECRET")
+	if internalSecret == "" {
+		slog.Error("INTERNAL_API_SECRET is empty")
+		os.Exit(1)
+	}
 
-	// Initialize the connection pool
-	db, err := pgxpool.New(ctx, dbConfig.ConnectString())
+	cooldownNotifSend, err := strconv.Atoi(os.Getenv("COOLDOWN_NOTIF_SEND"))
 	if err != nil {
-		slog.Error("Unable to initialize database pool", slog.String("error", err.Error()))
+		slog.Error("COOLDOWN_NOTIF_SEND is Invalide")
 		os.Exit(1)
 	}
 
-	if err := db.Ping(ctx); err != nil {
-		slog.Error("Database is unreachable", slog.String("error", err.Error()))
-		os.Exit(1)
+	s3Config := config.S3{
+		Url:         os.Getenv("S3_URL"),
+		Region:      os.Getenv("S3_REGION"),
+		AccessKey:   os.Getenv("S3_ACCESS_KEY"),
+		SecretKey:   os.Getenv("S3_SECRET_KEY"),
+		ImageBucket: os.Getenv("S3_IMAGE_BUCKET"),
 	}
-
-	slog.Info("Database connected!")
 
 	// Dependency Injection
 	//? DB
@@ -108,10 +128,17 @@ func InitializeApi(ctx context.Context) (App, error) {
 	auditLogRepo := repo.NewAuditLogRepository(db)
 	roleRepo := repo.NewRoleRepository(db)
 	scheduleRepo := repo.NewScheduleRepository(db)
+	logReportRepo := repo.NewLogReportRepository(db)
+	notificationRepo := repo.NewNotificationRepository(db)
 
 	//? client
-	// scheduleClient := client.NewScheduleClient(scheduleEngineURL)
-	deviceGatewayClient := client.NewDeviceGatewayClient(deviceGatewayURL)
+	scheduleClient := client.NewScheduleClient(scheduleEngineURL, internalSecret)
+	deviceGatewayClient := client.NewDeviceGatewayClient(deviceGatewayURL, internalSecret)
+	notificationClient := client.NewNotificationClient(
+		config.Sms{},
+		config.Email{},
+		config.Line{},
+	)
 
 	//? service
 	widgetService := service.NewWidgetService(txManager, widgetRepo, widgetTypeRepo, canvasRepo)
@@ -119,17 +146,22 @@ func InitializeApi(ctx context.Context) (App, error) {
 	widgetTypeService := service.NewWidgetTypeService(txManager, widgetTypeRepo)
 	userService := service.NewUserService(txManager, userRepo, jwtKey, roleRepo, auditLogRepo)
 	deviceService := service.NewDeviceService(txManager, deviceRepo, auditLogRepo)
-	roleService := service.NewRoleService(txManager, roleRepo)
-	scheduleService := service.NewScheduleService(txManager, scheduleRepo, auditLogRepo)
+	roleService := service.NewRoleService(txManager, roleRepo, auditLogRepo)
+	scheduleService := service.NewScheduleService(txManager, scheduleRepo, auditLogRepo, scheduleClient)
+	logReportService := service.NewLogReportService(logReportRepo)
+	notificationService := service.NewNotificationService(txManager, notificationRepo, auditLogRepo, notificationClient, make(chan []model.DeviceData), cooldownNotifSend)
 
 	handlers := router.RouterHandlers{
-		Widget:     handler.NewWidgetHandler(widgetService, roleService),
-		Canvas:     handler.NewCanvasHandler(canvasService, roleService),
-		WidgetType: handler.NewWidgetTypeHandler(widgetTypeService),
-		User:       handler.NewUserHandler(userService, roleService),
-		Device:     handler.NewDeviceHandler(deviceService, roleService, deviceGatewayClient),
-		Role:       handler.NewRoleHandler(roleService),
-		Schedule:   handler.NewScheduleHandler(scheduleService, roleService),
+		Widget:       handler.NewWidgetHandler(widgetService, roleService),
+		Canvas:       handler.NewCanvasHandler(canvasService, roleService),
+		WidgetType:   handler.NewWidgetTypeHandler(widgetTypeService),
+		User:         handler.NewUserHandler(userService, roleService),
+		Device:       handler.NewDeviceHandler(deviceService, roleService, deviceGatewayClient, notificationClient),
+		Role:         handler.NewRoleHandler(roleService),
+		Schedule:     handler.NewScheduleHandler(scheduleService, roleService),
+		LogReport:    handler.NewLogReportHandler(logReportService),
+		Notification: handler.NewNotificationHandler(notificationService, roleService),
+		S3File:       handler.NewS3FileHandler(s3Config),
 	}
 
 	// Initialize Router (using the struct bundle from earlier)

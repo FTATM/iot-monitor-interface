@@ -13,5 +13,5 @@ type ScheduleEngineService interface {
 	SyncJob(ctx context.Context, id string) error
 	CancelJob(schedID string) bool
 	Start(ctx context.Context) error
-	Stop()
+	Shutdown(ctx context.Context) error
 }

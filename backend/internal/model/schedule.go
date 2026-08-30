@@ -6,17 +6,18 @@ import (
 )
 
 type Schedule struct {
-	ScheduleId     string     `json:"scheduleId" db:"schedule_id"`
-	DeviceId       int        `json:"deviceId" db:"device_id"`
-	Action         string     `json:"action" db:"action"`
-	ScheduleType   string     `json:"scheduleType" db:"schedule_type"`
-	Status         string     `json:"status" db:"status"`
-	StartTime      time.Time  `json:"startTime" db:"start_time"`
-	EndTime        *time.Time `json:"endTime" db:"end_time"`
-	CronExpression *string    `json:"cronExpression" db:"cron_expression"`
-	LastRunAt      *time.Time `json:"lastRunAt" db:"last_run_at"`
-	CreatedAt      time.Time  `json:"createdAt" db:"created_at"`
-	UpdatedAt      *time.Time `json:"updatedAt" db:"updated_at"`
+	ScheduleId     string      `json:"scheduleId" db:"schedule_id"`
+	DeviceId       *int        `json:"deviceId" db:"device_id"`
+	DeviceGroupId  *int        `json:"deviceGroupId" db:"device_group_id"`
+	TaskAction     DynamicJSON `json:"taskAction" db:"task_action"`
+	ScheduleType   string      `json:"scheduleType" db:"schedule_type"`
+	Status         string      `json:"status" db:"status"`
+	StartTime      time.Time   `json:"startTime" db:"start_time"`
+	EndTime        *time.Time  `json:"endTime" db:"end_time"`
+	CronExpression *string     `json:"cronExpression" db:"cron_expression"`
+	LastRunAt      *time.Time  `json:"lastRunAt" db:"last_run_at"`
+	CreatedAt      time.Time   `json:"createdAt" db:"created_at"`
+	UpdatedAt      *time.Time  `json:"updatedAt" db:"updated_at"`
 }
 
 func (s *Schedule) IsSame(req Schedule) bool {
@@ -26,7 +27,8 @@ func (s *Schedule) IsSame(req Schedule) bool {
 
 	return s.ScheduleId == req.ScheduleId &&
 		s.DeviceId == req.DeviceId &&
-		s.Action == req.Action &&
+		s.DeviceGroupId == req.DeviceGroupId &&
+		s.TaskAction.AreJSONsEqual(req.TaskAction) &&
 		s.ScheduleType == req.ScheduleType &&
 		s.Status == req.Status &&
 		s.StartTime.Equal(req.StartTime) &&
@@ -35,40 +37,43 @@ func (s *Schedule) IsSame(req Schedule) bool {
 }
 
 type ScheduleDetail struct {
-	ScheduleId     string     `json:"scheduleId"`
-	DeviceId       int        `json:"deviceId"`
-	Action         string     `json:"action"`
-	ScheduleType   string     `json:"scheduleType"`
-	Status         string     `json:"status"`
-	StartTime      time.Time  `json:"startTime"`
-	EndTime        *time.Time `json:"endTime"`
-	CronExpression *string    `json:"cronExpression"`
+	ScheduleId     string      `json:"scheduleId"`
+	DeviceId       *int        `json:"deviceId"`
+	DeviceGroupId  *int        `json:"deviceGroupId"`
+	TaskAction     DynamicJSON `json:"taskAction"`
+	ScheduleType   string      `json:"scheduleType"`
+	Status         string      `json:"status"`
+	StartTime      time.Time   `json:"startTime"`
+	EndTime        *time.Time  `json:"endTime"`
+	CronExpression *string     `json:"cronExpression"`
 }
 
 type CreateScheduleReq struct {
-	DeviceId       int        `json:"deviceId"`
-	Action         string     `json:"action"`
-	ScheduleType   string     `json:"scheduleType"`
-	Status         string     `json:"status"`
-	StartTime      time.Time  `json:"startTime"`
-	EndTime        *time.Time `json:"endTime"`
-	CronExpression *string    `json:"cronExpression"`
+	DeviceId       *int        `json:"deviceId"`
+	DeviceGroupId  *int        `json:"deviceGroupId"`
+	TaskAction     DynamicJSON `json:"taskAction"`
+	ScheduleType   string      `json:"scheduleType"`
+	Status         string      `json:"status"`
+	StartTime      time.Time   `json:"startTime"`
+	EndTime        *time.Time  `json:"endTime"`
+	CronExpression *string     `json:"cronExpression"`
 }
 
 type UpdateScheduleReq struct {
-	ScheduleId     string     `json:"scheduleId"`
-	DeviceId       int        `json:"deviceId"`
-	Action         string     `json:"action"`
-	ScheduleType   string     `json:"scheduleType"`
-	Status         string     `json:"status"`
-	StartTime      time.Time  `json:"startTime"`
-	EndTime        *time.Time `json:"endTime"`
-	CronExpression *string    `json:"cronExpression"`
+	ScheduleId     string      `json:"scheduleId"`
+	DeviceId       *int        `json:"deviceId"`
+	DeviceGroupId  *int        `json:"deviceGroupId"`
+	TaskAction     DynamicJSON `json:"taskAction"`
+	ScheduleType   string      `json:"scheduleType"`
+	Status         string      `json:"status"`
+	StartTime      time.Time   `json:"startTime"`
+	EndTime        *time.Time  `json:"endTime"`
+	CronExpression *string     `json:"cronExpression"`
 }
 
 type ScheduleClient interface {
-	SyncSchedule(scheduleID string) error
-	UnsyncSchedule(scheduleID string) error
+	SyncSchedule(ctx context.Context, scheduleID string) error
+	UnsyncSchedule(ctx context.Context, scheduleID string) error
 }
 
 type ScheduleRepository interface {

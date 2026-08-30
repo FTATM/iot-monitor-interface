@@ -3,21 +3,21 @@
     
     <!-- Chart Appearance -->
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
-      <h4 class="font-bold text-sm mb-3 text-base-content">Chart Appearance</h4>
+      <h4 class="font-bold text-sm mb-3 text-base-content">{{ $t('common.chartAppearance') }}</h4>
       
       <div class="grid grid-cols-2 gap-4">
         <label class="form-control w-full">
-          <div class="label pb-1"><span class="label-text font-semibold">Text Color</span></div>
+          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('common.textColor') }}</span></div>
           <input type="color" v-model="localConfig.textColor"
             class="h-10 w-full cursor-pointer rounded border border-base-300 p-0" />
         </label>
         
         <label class="form-control w-full">
           <div class="label pb-1">
-            <span class="label-text font-semibold">Y-Axis Unit Label</span>
+            <span class="label-text font-semibold">{{ $t('barChart.config.yAxisLabel') }}</span>
           </div>
           <input type="text" v-model="localConfig.yAxisName"
-            class="input input-bordered input-sm w-full" placeholder="e.g., MB/s, °C" />
+            class="input input-bordered input-sm w-full" :placeholder="$t('barChart.config.yAxisPlaceholder')" />
         </label>
       </div>
     </div>
@@ -25,7 +25,7 @@
     <!-- Device Specific Colors -->
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
       <div class="flex justify-between items-center mb-4">
-        <h4 class="font-bold text-sm text-base-content m-0">Device Colors</h4>
+        <h4 class="font-bold text-sm text-base-content m-0">{{ $t('common.deviceColors') }}</h4>
       </div>
       
       <div class="flex flex-col gap-2">
@@ -39,7 +39,7 @@
         </div>
 
         <div v-if="activeDevices.length === 0" class="text-sm text-base-content/50 py-2 text-center">
-          No devices selected. Please select devices in the General Settings tab first.
+          {{ $t('common.noDevicesSelected') }}
         </div>
       </div>
     </div>
@@ -67,7 +67,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-// Strictly preserve the dropdown selection order
 const activeDevices = computed(() => {
   if (!props.selectedDeviceIds) return [];
   return props.selectedDeviceIds
@@ -83,7 +82,6 @@ const localConfig = ref({
   deviceColors: props.modelValue.deviceColors || {}
 });
 
-// Auto-assign colors to new devices
 watch(() => props.selectedDeviceIds, (newIds) => {
   newIds.forEach((id, index) => {
     if (!localConfig.value.deviceColors[id]) {

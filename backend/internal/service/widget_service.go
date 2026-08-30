@@ -122,26 +122,26 @@ func (s *widgetService) UpsertWidget(ctx context.Context, upsertWidget *model.Up
 	for _, reqWidget := range upsertWidget.UpsertWidgets {
 		if reqWidget.WidgetId == 0 {
 			tempCreate := model.Widget{
-				WidgetTypeId: reqWidget.WidgetTypeId,
-				CanvasId:     upsertWidget.CanvasId,
-				WidgetLabel:  reqWidget.WidgetLabel,
-				DeviceIds:    reqWidget.DeviceIds,
-				// DeviceId:        reqWidget.DeviceId,
+				WidgetTypeId:    reqWidget.WidgetTypeId,
+				CanvasId:        upsertWidget.CanvasId,
+				WidgetLabel:     reqWidget.WidgetLabel,
+				DeviceGroupId:   reqWidget.DeviceGroupId,
+				DeviceIds:       reqWidget.DeviceIds,
 				LayoutData:      reqWidget.LayoutData,
-				WidgetColor:     reqWidget.WidgetColor,
+				WidgetStyle:     reqWidget.WidgetStyle,
 				CustomChartData: reqWidget.CustomChartData,
 			}
 			toCreate = append(toCreate, tempCreate)
 		} else {
 			tempUpdate := model.Widget{
-				WidgetId:     reqWidget.WidgetId,
-				WidgetTypeId: reqWidget.WidgetTypeId,
-				CanvasId:     upsertWidget.CanvasId,
-				WidgetLabel:  reqWidget.WidgetLabel,
-				DeviceIds:    reqWidget.DeviceIds,
-				// DeviceId:        reqWidget.DeviceId,
+				WidgetId:        reqWidget.WidgetId,
+				WidgetTypeId:    reqWidget.WidgetTypeId,
+				CanvasId:        upsertWidget.CanvasId,
+				WidgetLabel:     reqWidget.WidgetLabel,
+				DeviceGroupId:   reqWidget.DeviceGroupId,
+				DeviceIds:       reqWidget.DeviceIds,
 				LayoutData:      reqWidget.LayoutData,
-				WidgetColor:     reqWidget.WidgetColor,
+				WidgetStyle:     reqWidget.WidgetStyle,
 				CustomChartData: reqWidget.CustomChartData,
 			}
 			reqMap[reqWidget.WidgetId] = tempUpdate
@@ -162,6 +162,20 @@ func (s *widgetService) UpsertWidget(ctx context.Context, upsertWidget *model.Up
 	}
 
 	defer tx.Rollback(ctx)
+
+	if upsertWidget.CanvasStyle != nil {
+		oldCanvas, err := s.canvasRepo.GetById(ctx, upsertWidget.CanvasId)
+		if err != nil {
+			return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+		}
+
+		canvas := model.Canvas{CanvasId: upsertWidget.CanvasId, CanvasName: oldCanvas.CanvasName, CanvasStyle: upsertWidget.CanvasStyle}
+		if !oldCanvas.IsSame(canvas) {
+			if err = s.canvasRepo.Update(tx.Context(), &canvas); err != nil {
+				return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+			}
+		}
+	}
 
 	if err = s.DeleteWidget(tx.Context(), toDelete); err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)

@@ -21,51 +21,83 @@ func NewDeviceGatewayRepository(pool *pgxpool.Pool) model.DeviceGatewayRepositor
 	}
 }
 
-func (r *deviceGatewayRepo) BulkUpsertDeviceData(ctx context.Context, data []model.DeviceDataRequest) error {
+func (r *deviceGatewayRepo) BulkUpsertDeviceData(ctx context.Context, data []model.DeviceData) error {
 	const fname = "BulkUpsertDeviceData"
+
+	if len(data) == 0 {
+		return nil
+	}
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("[%s]>[%s] begin tx failed: %w", r.prefixError, fname, err)
 	}
-	defer tx.Rollback(ctx) // no-op if committed
+	defer tx.Rollback(ctx)
 
-	// 1. Batch update device_latest (device table)
+	// 1. Batch update only active devices and RETURN the device_id if updated
 	batch := &pgx.Batch{}
-	updateQuery := `UPDATE device SET value_data = $1, updated_at = now(),last_seen_at = now() WHERE device_id = $2`
+	updateQuery := `
+		UPDATE device 
+		SET value_data = $1, updated_at = now(), last_seen_at = now() 
+		WHERE device_id = $2 AND active = true
+		RETURNING device_id`
+
 	for _, d := range data {
 		batch.Queue(updateQuery, d.ValueData, d.DeviceId)
 	}
+
 	br := tx.SendBatch(ctx, batch)
+
+	// Track which device IDs were successfully updated (i.e. were active)
+	activeDeviceIDs := make(map[int]struct{}, len(data))
 	for i := range data {
-		if _, err := br.Exec(); err != nil {
+		rows, err := br.Query()
+		if err != nil {
 			br.Close()
 			return fmt.Errorf("[%s]>[%s] batch update failed at index %d: %w", r.prefixError, fname, i, err)
 		}
+
+		var updatedID int
+		if rows.Next() {
+			if err := rows.Scan(&updatedID); err != nil {
+				rows.Close()
+				br.Close()
+				return fmt.Errorf("[%s]>[%s] scan failed at index %d: %w", r.prefixError, fname, i, err)
+			}
+			activeDeviceIDs[updatedID] = struct{}{}
+		}
+		rows.Close()
 	}
+
 	if err := br.Close(); err != nil {
 		return fmt.Errorf("[%s]>[%s] batch close failed: %w", r.prefixError, fname, err)
 	}
 
-	// 2. Bulk copy insert into device_data_log (history)
-	rows := make([][]any, len(data))
-	for i, d := range data {
-		rows[i] = []any{d.DeviceId, d.ValueData, d.Source, d.ReceivedAt}
-	}
-	copyCount, err := tx.CopyFrom(
-		ctx,
-		pgx.Identifier{"device_data_log"},
-		[]string{"device_id", "value_data", "source", "received_at"},
-		pgx.CopyFromRows(rows),
-	)
-	if err != nil {
-		return fmt.Errorf("[%s]>[%s] copy failed: %w", r.prefixError, fname, err)
-	}
-	if int(copyCount) != len(data) {
-		return fmt.Errorf("[%s]>[%s] copy mismatch: expected %d rows, inserted %d", r.prefixError, fname, len(data), copyCount)
+	// 2. Filter data for CopyFrom — only include logs for active devices
+	var rows [][]any
+	for _, d := range data {
+		if _, ok := activeDeviceIDs[d.DeviceId]; ok {
+			rows = append(rows, []any{d.DeviceId, d.ValueData, d.ReceivedAt})
+		}
 	}
 
-	// 3. Commit both together — atomic, either both succeed or both roll back
+	// If no devices were active, skip CopyFrom and just commit
+	if len(rows) > 0 {
+		copyCount, err := tx.CopyFrom(
+			ctx,
+			pgx.Identifier{"device_data_log"},
+			[]string{"device_id", "value_data", "received_at"},
+			pgx.CopyFromRows(rows),
+		)
+		if err != nil {
+			return fmt.Errorf("[%s]>[%s] copy failed: %w", r.prefixError, fname, err)
+		}
+		if int(copyCount) != len(rows) {
+			return fmt.Errorf("[%s]>[%s] copy mismatch: expected %d rows, inserted %d", r.prefixError, fname, len(rows), copyCount)
+		}
+	}
+
+	// 3. Commit
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("[%s]>[%s] commit failed: %w", r.prefixError, fname, err)
 	}
@@ -73,36 +105,115 @@ func (r *deviceGatewayRepo) BulkUpsertDeviceData(ctx context.Context, data []mod
 	return nil
 }
 
-func (r *deviceGatewayRepo) Test(ctx context.Context, data []model.DeviceDataRequest) error {
-	const fname = "Test"
+func (r *deviceGatewayRepo) UpdateLastSeen(ctx context.Context, deviceId int) error {
+	const fname = "UpdateLastSeen"
 
-	tx, err := r.pool.Begin(ctx)
+	query := `UPDATE device SET last_seen_at = now() WHERE device_id = $1`
+
+	result, err := r.pool.Exec(ctx, query, deviceId)
+
 	if err != nil {
-		return fmt.Errorf("[%s]>[%s] begin tx failed: %w", r.prefixError, fname, err)
-	}
-	defer tx.Rollback(ctx) // no-op if committed
-
-	// 1. Batch update device_latest (device table)
-	batch := &pgx.Batch{}
-	updateQuery := `UPDATE device SET value_data = $1, updated_at = now(),last_seen_at = now() WHERE device_id = $2`
-	for _, d := range data {
-		batch.Queue(updateQuery, d.ValueData, d.DeviceId)
-	}
-	br := tx.SendBatch(ctx, batch)
-	for i := range data {
-		if _, err := br.Exec(); err != nil {
-			br.Close()
-			return fmt.Errorf("[%s]>[%s] batch update failed at index %d: %w", r.prefixError, fname, i, err)
-		}
-	}
-	if err := br.Close(); err != nil {
-		return fmt.Errorf("[%s]>[%s] batch close failed: %w", r.prefixError, fname, err)
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 
-	// 3. Commit both together — atomic, either both succeed or both roll back
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("[%s]>[%s] commit failed: %w", r.prefixError, fname, err)
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, pgx.ErrNoRows)
 	}
 
 	return nil
+}
+
+func (r *deviceGatewayRepo) GetDeviceIdByName(ctx context.Context, deviceName string) (int, error) {
+	const fname = "GetDeviceIdByName"
+	var deviceId int
+	query := `
+		SELECT 
+			device_id
+		FROM device
+		WHERE 
+			device_name = $1 AND
+			(active = true AND deleted_at IS NULL)
+	`
+
+	err := r.pool.QueryRow(ctx, query, deviceName).Scan(&deviceId)
+
+	if err != nil {
+		return 0, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return deviceId, nil
+}
+
+func (r *deviceGatewayRepo) GetDeviceIdByGroupName(ctx context.Context, groupName string) ([]model.DeviceGroupData, error) {
+	const fname = "GetDeviceIdByGroupName"
+	query := `
+        SELECT 
+            dg.group_id,
+            dg.group_name,
+            dg.protocol,
+            array_agg(d.device_name) AS device_name_s
+        FROM device_group dg
+        JOIN device_group_map dgm on dg.group_id = dgm.group_id
+        JOIN device d on dgm.device_id = d.device_id
+        WHERE 
+            dg.group_name = $1 AND
+            (d.active = true AND d.deleted_at IS NULL)
+        GROUP BY 
+            dg.group_id, 
+            dg.group_name, 
+            dg.protocol
+    `
+
+	rows, err := r.pool.Query(ctx, query, groupName)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	deviceGroupData, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.DeviceGroupData])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return deviceGroupData, nil
+}
+
+func (r *deviceGatewayRepo) GetDeviceNameById(ctx context.Context, deviceId int) (string, error) {
+	const fname = "GetDeviceNameById"
+	var deviceName string
+	query := `
+		SELECT 
+			device_name
+		FROM device
+		WHERE 
+			device_id = $1 AND
+			(active = true AND deleted_at IS NULL)
+	`
+
+	err := r.pool.QueryRow(ctx, query, deviceId).Scan(&deviceName)
+
+	if err != nil {
+		return "", fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return deviceName, nil
+}
+
+func (r *deviceGatewayRepo) GetDeviceGroupNameById(ctx context.Context, groupId int) (string, error) {
+	const fname = "GetDeviceGroupNameById"
+	var deviceName string
+	query := `
+		SELECT 
+			group_name
+		FROM device_group
+		WHERE 
+			group_id = $1
+	`
+
+	err := r.pool.QueryRow(ctx, query, groupId).Scan(&deviceName)
+
+	if err != nil {
+		return "", fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return deviceName, nil
 }

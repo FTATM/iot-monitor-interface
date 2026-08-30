@@ -15,21 +15,23 @@ type deviceGatewayService struct {
 	prefixError string
 
 	// Batching state
-	inputCh   chan model.DeviceDataRequest
-	batchSize int
-	timeout   time.Duration
-	wg        sync.WaitGroup
-	ctx       context.Context
-	cancel    context.CancelFunc
+	inputCh      chan model.DeviceData
+	batchSize    int
+	timeout      time.Duration
+	wg           sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
+	notifService model.NotificationService
 }
 
-func NewDeviceGatewayService(repo model.DeviceGatewayRepository, batchSize int, timeout time.Duration) model.DeviceGatewayService {
+func NewDeviceGatewayService(repo model.DeviceGatewayRepository, batchSize int, timeout time.Duration, notifService model.NotificationService) model.DeviceGatewayService {
 	return &deviceGatewayService{
-		repo:        repo,
-		prefixError: "deviceGatewayService",
-		inputCh:     make(chan model.DeviceDataRequest, batchSize),
-		batchSize:   batchSize,
-		timeout:     timeout,
+		repo:         repo,
+		prefixError:  "deviceGatewayService",
+		inputCh:      make(chan model.DeviceData, batchSize),
+		batchSize:    batchSize,
+		timeout:      timeout,
+		notifService: notifService,
 	}
 }
 
@@ -43,7 +45,7 @@ func (s *deviceGatewayService) Start(parentCtx context.Context) error {
 
 	go func() {
 		defer s.wg.Done()
-		batch := make([]model.DeviceDataRequest, 0, s.batchSize)
+		batch := make([]model.DeviceData, 0, s.batchSize)
 		ticker := time.NewTicker(s.timeout)
 		defer ticker.Stop()
 
@@ -58,7 +60,7 @@ func (s *deviceGatewayService) Start(parentCtx context.Context) error {
 				} else {
 					slog.InfoContext(s.ctx, "Flushed batch to database", slog.Int("count", len(batch)))
 				}
-
+				s.notifService.AddDeviceDataAlert(batch)
 				// Re-slice to zero to reuse memory
 				batch = batch[:0]
 			}
@@ -87,7 +89,7 @@ func (s *deviceGatewayService) Start(parentCtx context.Context) error {
 	return nil
 }
 
-func (s *deviceGatewayService) Add(data model.DeviceDataRequest) {
+func (s *deviceGatewayService) Add(data model.DeviceData) {
 	data.ReceivedAt = time.Now()
 	select {
 	case s.inputCh <- data:
@@ -107,4 +109,31 @@ func (s *deviceGatewayService) Stop() {
 	}
 	s.wg.Wait() // Wait for the final DB flush to complete before exiting
 	slog.Info("Device Gateway Batcher stopped safely")
+}
+
+func (s *deviceGatewayService) UpdateDeviceLastSeen(ctx context.Context, deviceId int) error {
+	const fname = "UpdateDeviceLastSeen"
+	err := s.repo.UpdateLastSeen(ctx, deviceId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+	return nil
+}
+
+func (s *deviceGatewayService) GetDeviceIdByName(ctx context.Context, deviceName string) (int, error) {
+	const fname = "GetDeviceIdByName"
+	deviceId, err := s.repo.GetDeviceIdByName(ctx, deviceName)
+	if err != nil {
+		return 0, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+	return deviceId, nil
+}
+
+func (s *deviceGatewayService) GetDeviceIdByGroupName(ctx context.Context, deviceName string) ([]model.DeviceGroupData, error) {
+	const fname = "GetDeviceIdByGroupName"
+	deviceGroupName, err := s.repo.GetDeviceIdByGroupName(ctx, deviceName)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+	return deviceGroupName, nil
 }

@@ -1,15 +1,17 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import LoginView from '@/views/LoginView.vue';
 import DashboardView from '@/views/DashboardView.vue';
-import AboutView from '@/views/AboutView.vue';
+import LogReportView from '@/views/LogReportView.vue';
 import UserView from '@/views/management/UserView.vue';
 import DeviceView from '@/views/management/DeviceView.vue';
+import DeviceGroupView from '@/views/management/DeviceGroupView.vue';
 import RoleView from '@/views/management/RoleView.vue';
 import SchedulerView from '@/views/SchedulerView.vue';
 import CanvasView from '@/views/canvasManagement/CanvasView.vue';
 import CanvasDesignView from '@/views/canvasManagement/CanvasDesignView.vue';
 import CanvasAccessView from '@/views/canvasManagement/CanvasAccessView.vue';
-import Test from '@/views/Test.vue';
+import NotifUserView from '@/views/notification/NotifUserView.vue';
+import NotifDeviceRuleView from '@/views/notification/NotifDeviceRuleView.vue';
 import { useFetch } from '@/composables/useFetch';
 import { toast } from 'vue3-toastify';
 import { usePermissionStore } from '@/stores/usePermissionStore';
@@ -36,9 +38,10 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
-      path: '/about',
-      name: 'about',
-      component: AboutView
+      path: '/logReport',
+      name: 'logReport',
+      component: LogReportView,
+      meta: { requiresAuth: true },
     },
     {
       path: '/canvasManagement',
@@ -82,6 +85,11 @@ const router = createRouter({
           name: 'device',
           component: DeviceView,
         },
+        {
+          path: 'deviceGroup',
+          name: 'deviceGroup',
+          component: DeviceGroupView,
+        },
       ]
     },
     {
@@ -91,10 +99,22 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
-      path: '/Test',
-      name: 'Test',
-      component: Test
-    },
+      path: '/notification',
+      name: 'notification',
+      meta: { requiresAuth: true },
+      children: [
+        {
+          path: 'user',
+          name: 'notifUser',
+          component: NotifUserView,
+        },
+        {
+          path: 'devicerule',
+          name: 'notifDevicerule',
+          component: NotifDeviceRuleView,
+        }
+      ]
+    }
   ]
 });
 

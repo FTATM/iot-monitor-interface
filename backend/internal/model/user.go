@@ -13,6 +13,8 @@ type User struct {
 	PasswordHash string     `json:"-" db:"password_hash"`
 	Active       bool       `json:"active" db:"active"`
 	RoleId       int        `json:"roleId" db:"role_id"`
+	Email        string     `json:"email" db:"email"`
+	Tel          string     `json:"tel" db:"tel"`
 	CreatedAt    time.Time  `json:"-" db:"created_at"`
 	DeletedAt    *time.Time `json:"-" db:"deleted_at"`
 }
@@ -27,6 +29,8 @@ func (s *User) IsSame(req User) bool {
 		s.LastName == req.LastName &&
 		s.Username == req.Username &&
 		s.RoleId == req.RoleId &&
+		s.Email == req.Email &&
+		s.Tel == req.Tel &&
 		s.Active == req.Active
 }
 
@@ -46,6 +50,8 @@ type CreateUser struct {
 	Password  string `json:"password"`
 	Active    bool   `json:"active"`
 	RoleId    int    `json:"roleId"`
+	Email     string `json:"email"`
+	Tel       string `json:"tel"`
 }
 
 type UpdateUser struct {
@@ -55,6 +61,8 @@ type UpdateUser struct {
 	Password  string `json:"password,omitempty"`
 	Active    bool   `json:"active"`
 	RoleId    int    `json:"roleId"`
+	Email     string `json:"email"`
+	Tel       string `json:"tel"`
 }
 
 type UserRepository interface {

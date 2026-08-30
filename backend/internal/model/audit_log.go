@@ -12,9 +12,14 @@ type AuditLog struct {
 	EntityId   string      `json:"entityId" db:"entity_id"`
 	Action     string      `json:"action" db:"action"` // 'CREATE', 'UPDATE', 'DELETE'
 	ChangedBy  int         `json:"changedBy" db:"changed_by"`
-	OldData    DynamicJSON `json:"oldData" db:"old_data"` // What it looked like before (null if INSERT)
-	NewData    DynamicJSON `json:"newData" db:"new_data"` // What it looks like now (null if DELETE)
+	OldData    DynamicJSON `json:"-" db:"old_data"` // What it looked like before (null if INSERT)
+	NewData    DynamicJSON `json:"-" db:"new_data"` // What it looks like now (null if DELETE)
 	CreatedAt  time.Time   `json:"createdAt" db:"created_at"`
+}
+
+type AuditLogReport struct {
+	AuditLog
+	Username string `json:"username" db:"username"`
 }
 
 // action
@@ -22,6 +27,7 @@ const (
 	CreateAction string = "CREATE"
 	UpdateAction string = "UPDATE"
 	DeleteAction string = "DELETE"
+	QueryAction  string = "QUERY"
 )
 
 type AuditLogRepository interface {

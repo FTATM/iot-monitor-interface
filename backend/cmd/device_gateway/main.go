@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -22,53 +24,47 @@ func main() {
 	initLogger()
 
 	slog.Info("Starting device gateway initialization...")
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	rootCtx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
-	application, err := app.InitializeDeviceGateway(ctx)
+	application, err := app.InitializeDeviceGateway(rootCtx)
 	if err != nil {
 		slog.Error("Failed to initialize device gateway", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
-	defer application.Close()
-
+	serverErr := make(chan error, 1)
 	go func() {
-		if err := application.Run(); err != nil {
-			slog.Error("Device gateway crashed", slog.String("error", err.Error()))
-			os.Exit(1)
+		if err := application.Run(rootCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
 		}
 	}()
 
-	<-ctx.Done()
-	slog.Info("\nShutdown signal received...")
+	select {
+	case <-rootCtx.Done():
+		slog.Info("Shutdown signal received, starting graceful teardown...")
+	case err := <-serverErr:
+		slog.Error("Server crashed unexpectedly", slog.String("error", err.Error()))
+	}
+
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelShutdown()
+
+	application.Close(shutdownCtx)
+	slog.Info("Application terminated cleanly")
 }
 
 func initLogger() {
-	logDir := os.Getenv("LOG_DEVICE_GATEWAY_DIR")
-	if logDir == "" {
-		// Fallback to a local "log" folder if the env var is missing
-		logDir = "log/gateway"
-	}
+	logDir := app.GetEnvOrDefault("LOG_DEVICE_GATEWAY_DIR", "log/gateway")
 
-	var err error
-	logMaxSize, err := strconv.Atoi(os.Getenv("LOG_DEVICE_GATEWAY_MAX_SIZE"))
-	if err != nil {
-		panic("Failed to pass env MaxSize: " + err.Error())
-	}
-	logMaxBackup, err := strconv.Atoi(os.Getenv("LOG_DEVICE_GATEWAY_MAX_BACKUP"))
-	if err != nil {
-		panic("Failed to pass env MaxBackups: " + err.Error())
-	}
-	logMaxAge, err := strconv.Atoi(os.Getenv("LOG_DEVICE_GATEWAY_MAX_AGE"))
-	if err != nil {
-		panic("Failed to pass env MaxAge: " + err.Error())
-	}
+	logMaxSize := app.GetEnvIntOrDefault("LOG_DEVICE_GATEWAY_MAX_SIZE", 10)
+	logMaxBackup := app.GetEnvIntOrDefault("LOG_DEVICE_GATEWAY_MAX_BACKUP", 5)
+	logMaxAge := app.GetEnvIntOrDefault("LOG_DEVICE_GATEWAY_MAX_AGE", 28)
 
 	// Safely create the directory if it doesn't exist yet
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		// If we can't create the log folder, panic before the app starts
-		panic("Failed to create log directory: " + err.Error())
+		panic(fmt.Sprintf("Failed to create log directory: %s | error: %s", logDir, err.Error()))
 	}
 
 	// Set up the lumberjack file writer

@@ -1,14 +1,13 @@
 <template>
   <div class="flex flex-col gap-5">
     
-    <!-- General Pie Settings -->
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
-      <h4 class="font-bold text-sm mb-3 text-base-content">Chart Appearance</h4>
+      <h4 class="font-bold text-sm mb-3 text-base-content">{{ $t('common.chartAppearance') }}</h4>
       
       <div class="grid grid-cols-2 gap-4 mb-4">
         <label class="form-control w-full">
           <div class="label pb-1">
-            <span class="label-text font-semibold">Inner Radius</span>
+            <span class="label-text font-semibold">{{ $t('pieChart.config.innerRadius') }}</span>
           </div>
           <input type="text" v-model="localConfig.innerRadius"
             class="input input-bordered input-sm w-full" placeholder="40%" />
@@ -16,7 +15,7 @@
         
         <label class="form-control w-full">
           <div class="label pb-1">
-            <span class="label-text font-semibold">Outer Radius</span>
+            <span class="label-text font-semibold">{{ $t('pieChart.config.outerRadius') }}</span>
           </div>
           <input type="text" v-model="localConfig.outerRadius"
             class="input input-bordered input-sm w-full" placeholder="70%" />
@@ -26,7 +25,7 @@
       <div class="grid grid-cols-2 gap-4">
         <label class="form-control w-full">
           <div class="label pb-1">
-            <span class="label-text font-semibold">Corner Radius (px)</span>
+            <span class="label-text font-semibold">{{ $t('common.cornerRadius') }}</span>
           </div>
           <input type="number" v-model.number="localConfig.borderRadius"
             class="input input-bordered input-sm w-full" placeholder="5" />
@@ -34,15 +33,14 @@
         
         <label class="cursor-pointer label justify-start gap-4 mt-6">
           <input type="checkbox" v-model="localConfig.showLegend" class="toggle toggle-primary toggle-sm" />
-          <span class="label-text font-semibold">Show Legend</span>
+          <span class="label-text font-semibold">{{ $t('pieChart.config.showLegend') }}</span>
         </label>
       </div>
     </div>
 
-    <!-- Device Specific Colors -->
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
       <div class="flex justify-between items-center mb-4">
-        <h4 class="font-bold text-sm text-base-content m-0">Device Colors</h4>
+        <h4 class="font-bold text-sm text-base-content m-0">{{ $t('common.deviceColors') }}</h4>
       </div>
       
       <div class="flex flex-col gap-2">
@@ -56,7 +54,7 @@
         </div>
 
         <div v-if="activeDevices.length === 0" class="text-sm text-base-content/50 py-2 text-center">
-          No devices selected. Please select devices in the General Settings tab first.
+          {{ $t('common.noDevicesSelected') }}
         </div>
       </div>
     </div>
@@ -84,7 +82,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-// ⚡ THE FIX: Use .map() to strictly preserve the dropdown selection order
 const activeDevices = computed(() => {
   if (!props.selectedDeviceIds) return [];
   return props.selectedDeviceIds
@@ -102,7 +99,6 @@ const localConfig = ref({
   deviceColors: props.modelValue.deviceColors || {}
 });
 
-// Auto-assign colors to new devices
 watch(() => props.selectedDeviceIds, (newIds) => {
   newIds.forEach((id, index) => {
     if (!localConfig.value.deviceColors[id]) {

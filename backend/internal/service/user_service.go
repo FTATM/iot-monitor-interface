@@ -38,6 +38,8 @@ func (s *userService) CreateUser(ctx context.Context, createUser *model.CreateUs
 		Active:       createUser.Active,
 		PasswordHash: hash,
 		RoleId:       createUser.RoleId,
+		Email:        createUser.Email,
+		Tel:          createUser.Tel,
 	}
 
 	countValidate, err := s.userRepo.CountValidate(ctx, &user)
@@ -105,6 +107,8 @@ func (s *userService) UpdateUser(ctx context.Context, updateUser *model.UpdateUs
 		Active:       updateUser.Active,
 		PasswordHash: hash,
 		RoleId:       updateUser.RoleId,
+		Email:        updateUser.Email,
+		Tel:          updateUser.Tel,
 	}
 
 	countValidate, err := s.userRepo.CountValidate(ctx, &user)
@@ -199,7 +203,7 @@ func (s *userService) LoginUserJwt(ctx context.Context, creds *model.LoginCreden
 	}
 
 	if !user.Active {
-		return nil, tokenString, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+		return nil, tokenString, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, model.ErrNotActive)
 	}
 
 	match, err := argon2id.ComparePasswordAndHash(creds.Password, user.PasswordHash)
@@ -294,7 +298,7 @@ func (s *userService) DeleteUser(ctx context.Context, deleteUserId, authUserId i
 		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
 

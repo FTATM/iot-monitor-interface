@@ -2,35 +2,35 @@
   <div class="flex flex-col gap-5">
     
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
-      <h4 class="font-bold text-sm mb-3 text-base-content">Text Editor</h4>
+      <h4 class="font-bold text-sm mb-3 text-base-content">{{ $t('textWidget.config.textEditor') }}</h4>
       
       <!-- Unified Toolbar -->
       <div class="flex flex-wrap items-center gap-2 mb-2 bg-base-100 p-2 rounded border border-base-300 shadow-sm">
         
         <!-- Text Styling -->
         <div class="join border border-base-300">
-          <button @click.prevent="formatText('bold')" class="btn btn-sm btn-ghost join-item px-3 font-bold" title="Bold">B</button>
-          <button @click.prevent="formatText('italic')" class="btn btn-sm btn-ghost join-item px-3 italic" title="Italic">I</button>
-          <button @click.prevent="formatText('underline')" class="btn btn-sm btn-ghost join-item px-3 underline" title="Underline">U</button>
+          <button @click.prevent="formatText('bold')" class="btn btn-sm btn-ghost join-item px-3 font-bold" :title="$t('textWidget.config.bold')">B</button>
+          <button @click.prevent="formatText('italic')" class="btn btn-sm btn-ghost join-item px-3 italic" :title="$t('textWidget.config.italic')">I</button>
+          <button @click.prevent="formatText('underline')" class="btn btn-sm btn-ghost join-item px-3 underline" :title="$t('textWidget.config.underline')">U</button>
         </div>
 
         <!-- Lists -->
         <div class="join border border-base-300">
-          <button @click.prevent="formatText('insertUnorderedList')" class="btn btn-sm btn-ghost join-item px-3" title="Bullet List">• List</button>
-          <button @click.prevent="formatText('insertOrderedList')" class="btn btn-sm btn-ghost join-item px-3" title="Numbered List">1. List</button>
+          <button @click.prevent="formatText('insertUnorderedList')" class="btn btn-sm btn-ghost join-item px-3" :title="$t('textWidget.config.bulletList')">• List</button>
+          <button @click.prevent="formatText('insertOrderedList')" class="btn btn-sm btn-ghost join-item px-3" :title="$t('textWidget.config.numberedList')">1. List</button>
         </div>
 
         <div class="divider divider-horizontal mx-0"></div>
 
-        <!-- Block Alignment (Controls global alignment) -->
+        <!-- Block Alignment -->
         <div class="join border border-base-300">
-          <button @click.prevent="localConfig.textAlign = 'left'" :class="{ 'bg-base-300': localConfig.textAlign === 'left' }" class="btn btn-sm btn-ghost join-item px-2" title="Align Left">
+          <button @click.prevent="localConfig.textAlign = 'left'" :class="{ 'bg-base-300': localConfig.textAlign === 'left' }" class="btn btn-sm btn-ghost join-item px-2" :title="$t('textWidget.config.alignLeft')">
             <Icon icon="lucide:align-left" class="w-4 h-4" />
           </button>
-          <button @click.prevent="localConfig.textAlign = 'center'" :class="{ 'bg-base-300': localConfig.textAlign === 'center' }" class="btn btn-sm btn-ghost join-item px-2" title="Align Center">
+          <button @click.prevent="localConfig.textAlign = 'center'" :class="{ 'bg-base-300': localConfig.textAlign === 'center' }" class="btn btn-sm btn-ghost join-item px-2" :title="$t('textWidget.config.alignCenter')">
             <Icon icon="lucide:align-center" class="w-4 h-4" />
           </button>
-          <button @click.prevent="localConfig.textAlign = 'right'" :class="{ 'bg-base-300': localConfig.textAlign === 'right' }" class="btn btn-sm btn-ghost join-item px-2" title="Align Right">
+          <button @click.prevent="localConfig.textAlign = 'right'" :class="{ 'bg-base-300': localConfig.textAlign === 'right' }" class="btn btn-sm btn-ghost join-item px-2" :title="$t('textWidget.config.alignRight')">
             <Icon icon="lucide:align-right" class="w-4 h-4" />
           </button>
         </div>
@@ -39,17 +39,16 @@
 
         <!-- Font Size & Color -->
         <div class="flex items-center gap-2 ml-auto">
-          <div class="tooltip tooltip-bottom" data-tip="Base Font Size">
+          <div class="tooltip tooltip-bottom" :data-tip="$t('textWidget.config.baseFontSize')">
             <input type="number" v-model.number="localConfig.fontSize" class="input input-bordered input-sm w-16 text-center" placeholder="14" />
           </div>
-          <div class="tooltip tooltip-bottom" data-tip="Text Color">
+          <div class="tooltip tooltip-bottom" :data-tip="$t('common.textColor')">
             <input type="color" v-model="localConfig.textColor" class="h-8 w-10 cursor-pointer rounded border border-base-300 p-0" />
           </div>
         </div>
       </div>
 
       <!-- Editable Content Area -->
-      <!-- ⚡ NEW: Added max-h-[300px] so the box stops growing and starts scrolling -->
       <div 
         ref="editorRef"
         contenteditable="true"
@@ -68,7 +67,7 @@
     <div class="px-2">
       <label class="cursor-pointer flex items-center gap-4">
         <input type="checkbox" v-model="localConfig.showHeader" class="toggle toggle-primary toggle-sm" />
-        <span class="label-text font-semibold">Show Widget Header Card</span>
+        <span class="label-text font-semibold">{{ $t('textWidget.config.showHeaderCard') }}</span>
       </label>
     </div>
 
@@ -77,7 +76,10 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@iconify/vue'; 
+
+const { t } = useI18n();
 
 const props = defineProps({
   modelValue: {
@@ -94,7 +96,7 @@ const localConfig = ref({
   showHeader: props.modelValue.showHeader !== undefined ? props.modelValue.showHeader : true,
   textAlign: props.modelValue.textAlign || 'left',
   fontSize: props.modelValue.fontSize !== undefined ? props.modelValue.fontSize : 14,
-  textColor: props.modelValue.textColor || '#334155'
+  textColor: props.modelValue.textColor || '#3584e4'
 });
 
 const formatText = (command) => {
@@ -115,7 +117,7 @@ watch(localConfig, (newVal) => {
 
 onMounted(() => {
   if (editorRef.value) {
-    editorRef.value.innerHTML = localConfig.value.content || 'Type your notes or instructions here...';
+    editorRef.value.innerHTML = localConfig.value.content || t('textWidget.config.placeholder');
   }
   emit('update:modelValue', JSON.parse(JSON.stringify(localConfig.value)));
 });

@@ -1,6 +1,10 @@
 export const fetchWithAuth = async (url, options = {}) => {
+  // ⚡ Check if the body is FormData. If it is, DO NOT set the Content-Type.
+  const isFormData = options.body instanceof FormData;
+
   const headers = {
-    'Content-Type': 'application/json',
+    // Only apply application/json if it's a standard request
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...options.headers
   }
 

@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/FTATM/iot-monitor-interface/config"
+	"github.com/FTATM/iot-monitor-interface/internal/client"
 	"github.com/FTATM/iot-monitor-interface/internal/handler"
 	"github.com/FTATM/iot-monitor-interface/internal/listener"
 	"github.com/FTATM/iot-monitor-interface/internal/middleware"
@@ -21,14 +21,14 @@ import (
 )
 
 type ServerDeviceGateway struct {
-	DB             *pgxpool.Pool
-	Server         *http.Server
-	GatewayService model.DeviceGatewayService
-	SessionService model.SessionManagerService
-	ctx            context.Context
+	dB                   *pgxpool.Pool
+	server               *http.Server
+	gatewayService       model.DeviceGatewayService
+	sessionService       model.SessionManagerService
+	startDeviceRuleAlert func()
 }
 
-func (a *ServerDeviceGateway) Run() error {
+func (a *ServerDeviceGateway) Run(ctx context.Context) error {
 	slog.Info("Device Gateway starting listeners...")
 
 	gatewayPort := os.Getenv("DEVICE_GATEWAY_PORT")
@@ -36,45 +36,49 @@ func (a *ServerDeviceGateway) Run() error {
 		gatewayPort = "8090"
 	}
 
+	if err := a.gatewayService.Start(ctx); err != nil {
+		slog.Error("Failed to start device gateway service", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	go a.startDeviceRuleAlert()
+
 	// Start Protocol Listeners (Injecting SessionService so they can register connections)
-	go listener.StartTCPServer(a.ctx, ":"+gatewayPort, a.GatewayService, a.SessionService)
-	go listener.StartUDPServer(a.ctx, ":"+gatewayPort, a.GatewayService, a.SessionService)
+	go listener.StartTCPServer(ctx, ":"+gatewayPort, a.gatewayService, a.sessionService)
+	go listener.StartUDPServer(ctx, ":"+gatewayPort, a.gatewayService, a.sessionService)
 
 	brokerURL := os.Getenv("MQTT_BROKER_URL")
 	if brokerURL != "" {
-		go listener.StartMQTTClient(a.ctx, brokerURL, a.GatewayService, a.SessionService)
+		go listener.StartMQTTClient(ctx, brokerURL, a.gatewayService, a.sessionService)
 	}
 
+	go listener.StartCacheSweeper(ctx)
+
 	// Start HTTP Server for Telemetry and Internal Commands
-	slog.Info(fmt.Sprintf("Gateway HTTP Server starting on %s", a.Server.Addr))
-	return a.Server.ListenAndServe()
+	slog.Info(fmt.Sprintf("Gateway HTTP Server starting on %s", a.server.Addr))
+	return a.server.ListenAndServe()
 }
 
-func (a *ServerDeviceGateway) Close() {
+func (a *ServerDeviceGateway) Close(ctx context.Context) {
 	slog.Info("Executing graceful shutdown for Device Gateway...")
 
-	// Create a new context specifically for the HTTP shutdown timeout
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	// Shut down HTTP Server
-	if a.Server != nil {
-		if err := a.Server.Shutdown(shutdownCtx); err != nil {
+	if a.server != nil {
+		if err := a.server.Shutdown(ctx); err != nil {
 			slog.Error("Gateway HTTP server shutdown error", slog.String("error", err.Error()))
 		}
 	}
 
 	// Shut down the in-memory batcher engine (flushes remaining records to DB)
-	if a.GatewayService != nil {
-		a.GatewayService.Stop()
+	if a.gatewayService != nil {
+		a.gatewayService.Stop()
 	}
 
 	// Shut down PostgreSQL connection pool
-	if a.DB != nil {
-		a.DB.Close()
+	if a.dB != nil {
+		a.dB.Close()
 	}
 
-	slog.Info(fmt.Sprintf("Device Gateway successfully stopped on %s", a.Server.Addr))
+	slog.Info(fmt.Sprintf("Device Gateway successfully stopped on %s", a.server.Addr))
 }
 
 func InitializeDeviceGateway(ctx context.Context) (App, error) {
@@ -104,25 +108,29 @@ func InitializeDeviceGateway(ctx context.Context) (App, error) {
 
 	slog.Info("Device Gateway Database connected!")
 
-	gatewayRepo := repo.NewDeviceGatewayRepository(db)
-	qBuffer, err := strconv.Atoi(os.Getenv("DEVICE_GATEWAY_QUEUE_BUFFER"))
-	if err != nil {
-		slog.Error("QUEUE BUFFER env is not correct", slog.String("error", err.Error()))
-		os.Exit(1)
-	}
+	cooldownNotifSend := GetEnvIntOrDefault("COOLDOWN_NOTIF_SEND", 3)
+	qBuffer := GetEnvIntOrDefault("DEVICE_GATEWAY_QUEUE_BUFFER", 300)
+
 	qTimeout, err := time.ParseDuration(os.Getenv("DEVICE_GATEWAY_QUEUE_TIMEOUT_SECOND") + "s")
 	if err != nil {
 		slog.Error("QUEUE TIMEOUT env is not correct", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	gatewayService := service.NewDeviceGatewayService(gatewayRepo, qBuffer, qTimeout)
 
-	sessionService := service.NewSessionManagerService()
+	txManager := repo.NewTxManager(db)
+	gatewayRepo := repo.NewDeviceGatewayRepository(db)
+	notificationRepo := repo.NewNotificationRepository(db)
+	auditLogRepo := repo.NewAuditLogRepository(db)
 
-	if err := gatewayService.Start(ctx); err != nil {
-		slog.Error("Failed to start device gateway service", slog.String("error", err.Error()))
-		os.Exit(1)
-	}
+	notificationClient := client.NewNotificationClient(
+		config.Sms{},
+		config.Email{},
+		config.Line{},
+	)
+
+	notificationService := service.NewNotificationService(txManager, notificationRepo, auditLogRepo, notificationClient, make(chan []model.DeviceData, qBuffer), cooldownNotifSend)
+	gatewayService := service.NewDeviceGatewayService(gatewayRepo, qBuffer, qTimeout, notificationService)
+	sessionService := service.NewSessionManagerService(gatewayRepo)
 
 	handlers := router.RouterHandlers{
 		DeviceGateway: handler.NewDeviceGatewayHandler(gatewayService, sessionService),
@@ -144,10 +152,10 @@ func InitializeDeviceGateway(ctx context.Context) (App, error) {
 	}
 
 	return &ServerDeviceGateway{
-		DB:             db,
-		Server:         server,
-		GatewayService: gatewayService,
-		SessionService: sessionService,
-		ctx:            ctx,
+		dB:                   db,
+		server:               server,
+		gatewayService:       gatewayService,
+		sessionService:       sessionService,
+		startDeviceRuleAlert: notificationService.StartDeviceRuleAlert,
 	}, nil
 }

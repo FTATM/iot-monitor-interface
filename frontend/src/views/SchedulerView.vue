@@ -10,257 +10,478 @@
         </div>
 
         <div>
-          <h2 class="m-0 text-2xl font-extrabold text-base-content tracking-tight">Task Scheduler</h2>
-          <p class="mt-1 mb-0 text-base-content/60 text-sm font-medium">Schedule and manage automated tasks for your
-            devices.</p>
+          <h2 class="m-0 text-2xl font-extrabold text-base-content tracking-tight">{{ $t('scheduler.title') }}</h2>
+          <p class="mt-1 mb-0 text-base-content/60 text-sm font-medium">{{ $t('scheduler.subtitle') }}</p>
         </div>
       </div>
-
-      <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
-        <Icon icon="lucide:plus" class="w-5 h-5 stroke-[3]" />
-        Add Schedule
-      </button>
     </div>
 
-    <!-- Data Table Card -->
-    <div class="bg-base-100 shadow-sm rounded-box border border-base-200 overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="table w-full">
-          <!-- head -->
-          <thead class="bg-base-200/50 text-base-content">
-            <tr>
-              <th>Target Device</th>
-              <th>Task / Action</th>
-              <th>Type</th>
-              <th>Start Time</th>
-              <th>Status</th>
-              <th class="text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="isSchedulesLoading">
-              <td colspan="6" class="text-center py-8 text-base-content/50">
-                <span class="loading loading-spinner loading-md"></span>
-              </td>
-            </tr>
-            <tr v-else-if="schedules.length === 0">
-              <td colspan="6" class="text-center py-8 text-base-content/50">No schedules found. Create one to get
-                started.</td>
-            </tr>
-            <tr v-for="schedule in schedules" :key="schedule.scheduleId" class="hover:bg-base-200/30 transition-colors">
-              <td class="font-semibold">{{ getDeviceName(schedule.deviceId) }}</td>
-              <td>{{ schedule.action }}</td>
-              <td>
-                <span class="badge badge-outline badge-sm uppercase text-[10px] font-bold">
-                  {{ schedule.scheduleType === 'one_time' ? 'One Time' : 'Recurring' }}
-                </span>
-              </td>
-              <td>
-                <div class="flex items-center gap-2">
-                  <Icon icon="lucide:clock" class="w-4 h-4 text-base-content/50" />
-                  {{ formatDateTimeDisplay(schedule.startTime) }}
-                </div>
-              </td>
-              <td>
-                <div class="badge badge-sm font-bold uppercase tracking-wider text-[10px]" :class="{
-                  'badge-success text-white': schedule.status === 'completed',
-                  'badge-info text-white': schedule.status === 'active',
-                  'badge-error text-white': schedule.status === 'cancelled'
-                }">
-                  {{ schedule.status }}
-                </div>
-              </td>
-              <td class="text-right">
-                <button class="btn btn-sm btn-ghost btn-square text-primary hover:bg-primary/10"
-                  @click="openEditModal(schedule)">
-                  <Icon icon="lucide:pencil" class="w-4 h-4" />
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <!-- Data Table -->
+    <TableData :data="schedules" :columns="tableColumns" :is-loading="isSchedulesLoading">
+      <template #toolbar-actions>
+        <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
+          <Icon icon="lucide:plus" class="w-5 h-5 stroke-[3]" />
+          {{ $t('scheduler.addSchedule') }}
+        </button>
+      </template>
+
+      <template #cell-target="{ row }">
+        <div v-if="row.deviceGroupId" class="flex items-center gap-2">
+          <div class="p-1.5 bg-secondary/10 rounded-md">
+            <Icon icon="lucide:layers" class="w-4 h-4 text-secondary" />
+          </div>
+          <span class="font-semibold">{{ getGroupName(row.deviceGroupId) }}</span>
+        </div>
+        <div v-else-if="row.deviceId" class="flex items-center gap-2">
+          <div class="p-1.5 bg-primary/10 rounded-md">
+            <Icon icon="lucide:cpu" class="w-4 h-4 text-primary" />
+          </div>
+          <span class="font-semibold">{{ getDeviceName(row.deviceId) }}</span>
+        </div>
+        <div v-else class="badge badge-error badge-sm text-white font-bold">
+          {{ $t('scheduler.noTarget') }}
+        </div>
+      </template>
+
+      <template #cell-taskAction="{ value, row }">
+        <div v-if="row.deviceGroupId" class="flex flex-col gap-1">
+          <span class="text-sm font-medium whitespace-nowrap">
+            {{ $t('common.command') }}: <span
+              class="font-mono bg-base-200 px-1.5 py-0.5 rounded border border-base-300">{{ value?.command || '-'
+              }}</span>
+          </span>
+          <!-- ⚡ Uses the new helper function to filter out ghost data in the UI -->
+          <span v-if="getActiveOverridesCount(row) > 0"
+            class="text-[10px] text-base-content/60 font-bold uppercase tracking-wide">
+            {{ $t('common.overridesCount', { count: getActiveOverridesCount(row) }) }}
+          </span>
+        </div>
+        <div v-else>
+          <span class="font-mono bg-base-200 px-2 py-1 rounded text-sm border border-base-300">{{ value?.command ||
+            value || '-' }}</span>
+        </div>
+      </template>
+
+      <template #cell-scheduleType="{ value }">
+        <span class="badge badge-outline badge-sm uppercase text-[10px] font-bold">
+          {{ value === 'one_time' ? $t('scheduler.typeOneTime') : $t('scheduler.typeRecurring') }}
+        </span>
+      </template>
+
+      <template #cell-startTime="{ value }">
+        <div class="flex items-center gap-2">
+          <Icon icon="lucide:clock" class="w-4 h-4 text-base-content/50" />
+          {{ formatDateTimeDisplay(value) }}
+        </div>
+      </template>
+
+      <template #cell-status="{ value }">
+        <div class="badge badge-sm font-bold uppercase tracking-wider text-[10px]" :class="{
+          'badge-success text-white': value === 'completed',
+          'badge-info text-white': value === 'active',
+          'badge-error text-white': value === 'cancelled'
+        }">
+          {{ value }}
+        </div>
+      </template>
+
+      <template #cell-actions="{ row }">
+        <div class="flex justify-end">
+          <button class="btn btn-sm btn-primary" @click="openEditModal(row)">
+            <Icon icon="lucide:pencil" class="w-5 h-5" />
+          </button>
+        </div>
+      </template>
+    </TableData>
 
     <!-- Create / Edit Modal -->
     <dialog class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': isModalOpen }">
-      <div class="modal-box sm:max-w-lg">
-        <h3 class="font-bold text-lg mb-6 flex items-center gap-2">
-          <Icon :icon="modalMode === 'create' ? 'lucide:calendar-plus' : 'lucide:calendar-check'"
-            class="w-5 h-5 text-primary" />
-          {{ modalMode === 'create' ? 'Create New Schedule' : 'Edit Schedule' }}
-        </h3>
+      <div class="modal-box sm:max-w-lg p-0 flex flex-col max-h-[90vh]">
 
-        <form @submit.prevent="saveSchedule" class="flex flex-col gap-4">
+        <div class="px-6 py-5 border-b border-base-200 bg-base-100 flex justify-between items-center shrink-0">
+          <h3 class="m-0 font-bold text-lg flex items-center gap-2">
+            <Icon :icon="modalMode === 'create' ? 'lucide:calendar-plus' : 'lucide:calendar-check'"
+              class="w-5 h-5 text-primary" />
+            {{ modalMode === 'create' ? $t('scheduler.createSchedule') : $t('scheduler.editSchedule') }}
+          </h3>
+          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="closeModal">
+            <Icon icon="lucide:x" class="w-4 h-4" />
+          </button>
+        </div>
 
-          <!-- Device Dropdown from Master Data -->
-          <label class="form-control w-full">
-            <div class="label pb-1">
-              <span class="label-text font-semibold">Target Device</span>
-            </div>
-            <select v-model.number="form.deviceId" class="select select-bordered w-full" required>
-              <option value="" disabled>Select a device to command...</option>
-              <option v-for="device in devices" :key="device.deviceId" :value="device.deviceId">
-                {{ device.deviceName }}
-              </option>
-            </select>
-          </label>
+        <form @submit.prevent="saveSchedule" class="flex flex-col flex-1 min-h-0">
+          <div class="p-6 flex flex-col gap-2 flex-1 overflow-y-auto min-h-0">
 
-          <!-- Action / Task Name -->
-          <label class="form-control w-full">
-            <div class="label pb-1">
-              <span class="label-text font-semibold">Task / Action Command</span>
-            </div>
-            <input type="text" v-model="form.action" class="input input-bordered w-full"
-              placeholder="e.g., reboot, sync_data" required />
-          </label>
-
-          <!-- Schedule Type Toggle -->
-          <div class="form-control w-full mt-2">
-            <div class="label pb-2">
-              <span class="label-text font-semibold">Schedule Type</span>
-            </div>
-            <div class="flex gap-4">
-              <label
-                class="label cursor-pointer justify-start gap-2 bg-base-200/50 p-2 rounded-lg border border-base-200 flex-1">
-                <input type="radio" name="scheduleType" value="one_time" class="radio radio-primary radio-sm"
-                  v-model="form.scheduleType" />
-                <span class="label-text font-medium">One-Time Event</span>
-              </label>
-              <label
-                class="label cursor-pointer justify-start gap-2 bg-base-200/50 p-2 rounded-lg border border-base-200 flex-1">
-                <input type="radio" name="scheduleType" value="recurring" class="radio radio-primary radio-sm"
-                  v-model="form.scheduleType" />
-                <span class="label-text font-medium">Recurring (Cron)</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Recurring Specific Fields (Cron & End Time) -->
-          <div v-if="form.scheduleType === 'recurring'"
-            class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2 p-4 bg-base-200/50 border border-base-200 rounded-box">
-            <label class="form-control w-full sm:col-span-2">
-              <div class="label pb-1">
-                <span class="label-text font-semibold">Cron Expression</span>
-                <span class="label-text-alt text-base-content/60">e.g., */5 * * * *</span>
+            <div class="form-control w-full">
+              <div class="label pb-2">
+                <span class="label-text font-semibold">{{ $t('scheduler.targetType') }}</span>
               </div>
-              <input type="text" v-model="form.cronExpression" class="input input-bordered w-full input-sm"
-                placeholder="* * * * *" required />
+              <div class="flex gap-4">
+                <label
+                  class="label cursor-pointer justify-start gap-2 bg-base-200/50 p-2 rounded-lg border border-base-200 flex-1 hover:bg-base-200 transition-colors">
+                  <input type="radio" value="device" class="radio radio-primary radio-sm" v-model="form.targetType"
+                    @change="v$.$reset()" />
+                  <span class="label-text font-medium flex items-center gap-2">
+                    <Icon icon="lucide:cpu" class="w-4 h-4" /> {{ $t('common.device') }}
+                  </span>
+                </label>
+                <label
+                  class="label cursor-pointer justify-start gap-2 bg-base-200/50 p-2 rounded-lg border border-base-200 flex-1 hover:bg-base-200 transition-colors">
+                  <input type="radio" value="group" class="radio radio-primary radio-sm" v-model="form.targetType"
+                    @change="v$.$reset()" />
+                  <span class="label-text font-medium flex items-center gap-2">
+                    <Icon icon="lucide:layers" class="w-4 h-4" /> {{ $t('common.group') }}
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-control w-full mt-2">
+              <div class="label pb-1">
+                <span class="label-text font-semibold">{{ form.targetType === 'device' ?
+                  $t('scheduler.selectTargetDevice')
+                  : $t('scheduler.selectTargetGroup') }}</span>
+              </div>
+
+              <template v-if="form.targetType === 'device'">
+                <SearchableDropdown v-model="form.deviceId" :options="devices" label-key="deviceName"
+                  value-key="deviceId" :placeholder="$t('common.searchDevice')" />
+                <div class="label px-1 py-0 h-5">
+                  <span v-if="v$.deviceId.$error" class="label-text-alt text-error font-medium">{{
+                    v$.deviceId.$errors[0].$message }}</span>
+                </div>
+              </template>
+              <template v-else>
+                <SearchableDropdown v-model="form.deviceGroupId" :options="groups" label-key="groupName"
+                  value-key="groupId" :placeholder="$t('common.searchGroup')" />
+                <div class="label px-1 py-0 h-5">
+                  <span v-if="v$.deviceGroupId.$error" class="label-text-alt text-error font-medium">{{
+                    v$.deviceGroupId.$errors[0].$message }}</span>
+                </div>
+              </template>
+            </div>
+
+            <!-- Single Device Command -->
+            <template v-if="form.targetType === 'device'">
+              <label class="form-control w-full">
+                <div class="label pb-1">
+                  <span class="label-text font-semibold">{{ $t('scheduler.taskCommand') }}</span>
+                </div>
+                <input type="text" v-model="form.taskActionPayload.command"
+                  @blur="v$.taskActionPayload.command.$touch()"
+                  :class="['input input-bordered w-full', { 'input-error': v$.taskActionPayload.command.$error }]"
+                  :placeholder="$t('scheduler.taskCommandPlaceholder')" />
+                <div class="label px-1 py-0 h-5">
+                  <span v-if="v$.taskActionPayload.command.$error" class="label-text-alt text-error font-medium">{{
+                    v$.taskActionPayload.command.$errors[0].$message }}</span>
+                </div>
+              </label>
+            </template>
+
+            <!-- Group Device Command -->
+            <template v-if="form.targetType === 'group' && form.deviceGroupId">
+              <div class="p-4 bg-base-200/50 rounded-box border border-base-200 mt-2">
+                <h4 class="font-bold text-sm mb-3">{{ $t('common.groupCommandSettings') }}</h4>
+
+                <label class="form-control w-full">
+                  <div class="label pb-1"><span class="label-text font-semibold text-primary">{{
+                    $t('common.baseCommandGroup') }}</span></div>
+                  <input type="text" v-model="form.taskActionPayload.command"
+                    @blur="v$.taskActionPayload.command.$touch()"
+                    :class="['input input-bordered w-full border-primary', { 'input-error': v$.taskActionPayload.command.$error }]"
+                    placeholder="e.g., 0" />
+                  <div class="label px-1 py-0 h-5">
+                    <span v-if="v$.taskActionPayload.command.$error" class="label-text-alt text-error font-medium">{{
+                      v$.taskActionPayload.command.$errors[0].$message }}</span>
+                  </div>
+                </label>
+
+                <div class="flex justify-between items-center mt-2 border-t border-base-200/50 pt-4 mb-2">
+                  <span class="label-text font-semibold text-primary">{{ $t('common.enableOverrides') }}</span>
+                  <input type="checkbox" v-model="form.enableOverrides" @change="handleOverrideToggle"
+                    class="toggle toggle-primary toggle-sm" />
+                </div>
+
+                <div v-if="form.enableOverrides" class="flex flex-col gap-2 max-h-48 overflow-y-auto pr-2">
+                  <div v-for="device in activeGroupDevices" :key="device.deviceId"
+                    class="flex items-center gap-3 p-2 bg-base-100 rounded-lg border border-base-200">
+                    <span class="flex-1 text-sm font-semibold truncate" :title="device.deviceName">{{ device.deviceName
+                      }}</span>
+
+                    <input type="text" v-model="form.taskActionPayload.deviceOverrides[device.deviceId]"
+                      class="input input-bordered input-sm w-32" :placeholder="$t('common.default')" />
+                  </div>
+                  <div v-if="activeGroupDevices.length === 0"
+                    class="text-sm italic text-base-content/50 text-center py-4">
+                    {{ $t('common.noDevicesAssigned') }}
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <div class="form-control w-full mt-2">
+              <div class="label pb-2">
+                <span class="label-text font-semibold">{{ $t('scheduler.scheduleType') }}</span>
+              </div>
+              <div class="flex gap-4">
+                <label
+                  class="label cursor-pointer justify-start gap-2 bg-base-200/50 p-2 rounded-lg border border-base-200 flex-1 hover:bg-base-200 transition-colors">
+                  <input type="radio" value="one_time" class="radio radio-primary radio-sm"
+                    v-model="form.scheduleType" />
+                  <span class="label-text font-medium">{{ $t('scheduler.oneTimeEvent') }}</span>
+                </label>
+                <label
+                  class="label cursor-pointer justify-start gap-2 bg-base-200/50 p-2 rounded-lg border border-base-200 flex-1 hover:bg-base-200 transition-colors">
+                  <input type="radio" value="recurring" class="radio radio-primary radio-sm"
+                    v-model="form.scheduleType" />
+                  <span class="label-text font-medium">{{ $t('scheduler.recurringCron') }}</span>
+                </label>
+              </div>
+            </div>
+
+            <div v-if="form.scheduleType === 'recurring'"
+              class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 mt-2 p-4 bg-base-200/50 border border-base-200 rounded-box">
+              <label class="form-control w-full sm:col-span-2">
+                <div class="label pb-1">
+                  <span class="label-text font-semibold">{{ $t('scheduler.runFrequency') }}</span>
+                </div>
+                <select v-model="cronPreset" class="select select-bordered w-full">
+                  <option value="*/5 * * * *">{{ $t('scheduler.freq.min5') }}</option>
+                  <option value="*/15 * * * *">{{ $t('scheduler.freq.min15') }}</option>
+                  <option value="0 * * * *">{{ $t('scheduler.freq.hour1') }}</option>
+                  <option value="0 0 * * *">{{ $t('scheduler.freq.midnight') }}</option>
+                  <option value="0 8 * * *">{{ $t('scheduler.freq.am8') }}</option>
+                  <option value="custom">{{ $t('scheduler.freq.custom') }}</option>
+                </select>
+              </label>
+
+              <label v-if="cronPreset === 'custom'" class="form-control w-full sm:col-span-2 mt-2">
+                <div class="label pb-1">
+                  <span class="label-text font-semibold">{{ $t('scheduler.customCron') }}</span>
+                  <span class="label-text-alt text-base-content/60">{{ $t('scheduler.customCronHint') }}</span>
+                </div>
+                <input type="text" v-model="form.cronExpression" @blur="v$.cronExpression.$touch()"
+                  :class="['input input-bordered w-full input-sm', { 'input-error': v$.cronExpression.$error }]"
+                  placeholder="* * * * *" />
+                <div class="label px-1 py-0 h-5">
+                  <span v-if="v$.cronExpression.$error" class="label-text-alt text-error font-medium">{{
+                    v$.cronExpression.$errors[0].$message }}</span>
+                </div>
+              </label>
+
+              <label class="form-control w-full sm:col-span-2 mt-2">
+                <div class="label pb-1">
+                  <span class="label-text font-semibold">{{ $t('scheduler.endTime') }}</span>
+                </div>
+                <VueDatePicker v-model="form.endTime" :is-24="true" auto-apply :preset-dates="presetDates"
+                  format="yyyy-MM-dd HH:mm" :placeholder="$t('scheduler.selectEndTime')" teleport-center>
+                  <template #input-icon>
+                    <Icon icon="lucide:calendar-clock" class="w-5 h-5 ml-3 text-base-content/50" />
+                  </template>
+                </VueDatePicker>
+              </label>
+            </div>
+
+            <label class="form-control w-full mt-2">
+              <div class="label pb-1">
+                <span class="label-text font-semibold">{{ $t('scheduler.startTime') }}</span>
+              </div>
+              <VueDatePicker v-model="form.startTime" :is-24="true" auto-apply :preset-dates="presetDates"
+                format="yyyy-MM-dd HH:mm" :placeholder="$t('scheduler.selectStartTime')" teleport-center
+                @closed="v$.startTime.$touch()" />
+              <div class="label px-1 py-0 h-5">
+                <span v-if="v$.startTime.$error" class="label-text-alt text-error font-medium">{{
+                  v$.startTime.$errors[0].$message }}</span>
+              </div>
             </label>
 
-            <label class="form-control w-full sm:col-span-2">
+            <label v-if="modalMode === 'edit'" class="form-control w-full">
               <div class="label pb-1">
-                <span class="label-text font-semibold">End Time (Optional)</span>
+                <span class="label-text font-semibold">{{ $t('common.status') }}</span>
               </div>
-              <input type="datetime-local" v-model="form.endTime" class="input input-bordered w-full input-sm" />
+              <select v-model="form.status" class="select select-bordered w-full">
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
             </label>
           </div>
 
-          <!-- Date / Time Picker (Start Time) -->
-          <label class="form-control w-full">
-            <div class="label pb-1">
-              <span class="label-text font-semibold">Start Date & Time</span>
-            </div>
-            <input type="datetime-local" v-model="form.startTime" class="input input-bordered w-full" required />
-          </label>
-
-          <!-- Status Dropdown (Only show when editing) -->
-          <label v-if="modalMode === 'edit'" class="form-control w-full">
-            <div class="label pb-1">
-              <span class="label-text font-semibold">Status</span>
-            </div>
-            <select v-model="form.status" class="select select-bordered w-full">
-              <option value="active">Active</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </label>
-
-          <!-- Modal Actions -->
-          <div class="modal-action mt-6">
-            <button type="button" class="btn btn-ghost" @click="closeModal" :disabled="isSaving">Cancel</button>
+          <div class="px-6 py-4 border-t border-base-200 bg-base-100 flex justify-end gap-3 shrink-0">
+            <button type="button" class="btn btn-ghost" @click="closeModal" :disabled="isSaving">{{ $t('common.cancel')
+              }}</button>
             <button type="submit" class="btn btn-primary text-white px-8" :disabled="isSaving">
               <span v-if="isSaving" class="loading loading-spinner loading-sm"></span>
-              {{ isSaving ? 'Saving...' : 'Save Schedule' }}
+              {{ isSaving ? $t('scheduler.saving') : $t('scheduler.saveSchedule') }}
             </button>
           </div>
         </form>
       </div>
-
-      <!-- Click backdrop to close -->
-      <form method="dialog" class="modal-backdrop" @click="closeModal">
-        <button>close</button>
-      </form>
+      <form method="dialog" class="modal-backdrop" @click="closeModal"><button>close</button></form>
     </dialog>
   </div>
-  <NoAccess v-else/>
+  <NoAccess v-else />
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Icon } from '@iconify/vue';
 import { toast } from 'vue3-toastify';
 import { useFetch } from '@/composables/useFetch';
 import { useMutation } from '@/composables/useMutation';
 
+// ⚡ IMPORT VUELIDATE
+import { useVuelidate } from '@vuelidate/core';
+import { required, requiredIf, helpers } from '@vuelidate/validators';
+
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
+import SearchableDropdown from '@/components/SearchableDropdown.vue';
+import TableData from '@/components/TableData.vue';
 
-// --- API COMPOSABLES ---
-const { data: devicesData, execute: fetchDevices } = useFetch();
+import { VueDatePicker } from '@vuepic/vue-datepicker';
 
-const { data: schedulesData, isLoading: isSchedulesLoading, execute: fetchSchedules } = useFetch();
-const { error: createError, isLoading: isCreating, execute: createScheduleApi } = useMutation();
-const { error: updateError, isLoading: isUpdating, execute: updateScheduleApi } = useMutation();
+const { t } = useI18n();
 
-// --- STORE ---
+const { data: devicesData, error: deviceDataError, execute: fetchDevices } = useFetch();
+const { data: groupsData, error: groupDataError, execute: fetchGroups } = useFetch();
+
+const { data: schedulesData, error: schedulesDataError, isLoading: isSchedulesLoading, execute: fetchSchedules } = useFetch();
+const { error: createError, execute: createScheduleApi } = useMutation();
+const { error: updateError, execute: updateScheduleApi } = useMutation();
+
 const permissionStore = usePermissionStore();
 const { hasPermission } = permissionStore;
 
-// --- STATE ---
 const devices = ref([]);
+const groups = ref([]);
 const schedules = ref([]);
 const isModalOpen = ref(false);
 const modalMode = ref('create');
 const isSaving = ref(false);
+const presetDates = ref([{ label: 'Today', value: new Date() }]);
+const cronPreset = ref('*/5 * * * *');
+
+const tableColumns = computed(() => [
+  { header: t('scheduler.table.target'), id: 'target', enableSorting: false },
+  { header: t('scheduler.table.taskAction'), accessorKey: 'taskAction' },
+  { header: t('scheduler.table.type'), accessorKey: 'scheduleType' },
+  { header: t('scheduler.table.startTime'), accessorKey: 'startTime' },
+  { header: t('common.status'), accessorKey: 'status' },
+  { header: t('common.actions'), id: 'actions', enableSorting: false, meta: { headerClass: 'text-right', cellClass: 'text-right' } }
+]);
 
 const form = ref({
   scheduleId: null,
-  deviceId: '',
-  action: '',
+  targetType: 'device',
+  deviceId: null,
+  deviceGroupId: null,
+  enableOverrides: false,
+  taskActionPayload: {
+    command: '',
+    deviceOverrides: {}
+  },
   scheduleType: 'one_time',
   status: 'active',
-  startTime: '',
-  endTime: '',
-  cronExpression: ''
+  startTime: null,
+  endTime: null,
+  cronExpression: '*/5 * * * *'
 });
 
-// --- LIFECYCLE ---
+// ⚡ VUELIDATE RULES
+const rules = computed(() => ({
+  deviceId: {
+    requiredIfDevice: helpers.withMessage(t('scheduler.validation.selectDevice'), requiredIf(() => form.value.targetType === 'device'))
+  },
+  deviceGroupId: {
+    requiredIfGroup: helpers.withMessage(t('scheduler.validation.selectGroup'), requiredIf(() => form.value.targetType === 'group'))
+  },
+  taskActionPayload: {
+    command: {
+      required: helpers.withMessage(t('scheduler.validation.taskCommandRequired'), required)
+    }
+  },
+  startTime: {
+    required: helpers.withMessage(t('scheduler.validation.startTimeRequired'), required)
+  },
+  cronExpression: {
+    requiredIfRecurring: helpers.withMessage(t('scheduler.validation.cronRequired'), requiredIf(() => form.value.scheduleType === 'recurring' && cronPreset.value === 'custom'))
+  }
+}));
+
+const v$ = useVuelidate(rules, form);
+
+const activeGroupDevices = computed(() => {
+  if (form.value.targetType !== 'group' || !form.value.deviceGroupId) return [];
+  const group = groups.value.find(g => g.groupId === form.value.deviceGroupId);
+
+  if (group && group.devices) return group.devices;
+  if (group && group.deviceIds) return group.deviceIds.map(id => devices.value.find(d => d.deviceId === id)).filter(Boolean);
+
+  return devices.value.filter(d => d.deviceGroupId === form.value.deviceGroupId);
+});
+
+const handleOverrideToggle = () => {
+  if (!form.value.enableOverrides) {
+    form.value.taskActionPayload.deviceOverrides = {};
+  }
+};
+
 onMounted(async () => {
   await loadData();
 });
 
-// --- METHODS ---
 const loadData = async () => {
-  // Fetch devices master list
   await fetchDevices('/device/getalldetail');
-  if (devicesData.value?.data) {
-    devices.value = devicesData.value.data;
-  }
+  if (deviceDataError.value) toast.error(deviceDataError.value.message || t('common.messages.loadError'));
+  if (devicesData.value?.data) devices.value = devicesData.value.data;
 
-  // Fetch all schedules
+  await fetchGroups('/device/group/getalldetail');
+  if (groupDataError.value) toast.error(groupDataError.value.message || t('common.messages.loadError'));
+  if (groupsData.value?.data) groups.value = groupsData.value.data;
+
   await fetchSchedules('/schedule/getalldetail');
-  if (schedulesData.value?.data) {
-    schedules.value = schedulesData.value.data;
-  }
+  if (schedulesDataError.value) toast.error(schedulesDataError.value.message || t('common.messages.loadError'));
+  if (schedulesData.value?.data) schedules.value = schedulesData.value.data;
 };
 
 const getDeviceName = (id) => {
   const device = devices.value.find(d => d.deviceId === id);
-  return device ? device.deviceName : 'Unknown Device';
+  return device ? device.deviceName : t('scheduler.unknownDevice');
 };
 
-// Formats DB ISO string for the UI Table
+const getGroupName = (id) => {
+  const group = groups.value.find(g => g.groupId === id);
+  return group ? group.groupName : t('scheduler.unknownGroup');
+};
+
+const getActiveOverridesCount = (row) => {
+  if (!row.deviceGroupId || !row.taskAction?.deviceOverrides) return 0;
+
+  const group = groups.value.find(g => g.groupId === row.deviceGroupId);
+  let activeIds = [];
+
+  // Extract the current valid device IDs for this group
+  if (group && group.devices) {
+    activeIds = group.devices.map(d => Number(d.deviceId));
+  } else if (group && group.deviceIds) {
+    activeIds = group.deviceIds.map(id => Number(id));
+  } else {
+    activeIds = devices.value.filter(d => d.deviceGroupId === row.deviceGroupId).map(d => Number(d.deviceId));
+  }
+
+  // Count how many keys in the JSON actually exist in the activeIds array
+  let count = 0;
+  for (const idStr of Object.keys(row.taskAction.deviceOverrides)) {
+    if (activeIds.includes(Number(idStr))) {
+      count++;
+    }
+  }
+
+  return count;
+};
+
 const formatDateTimeDisplay = (isoString) => {
   if (!isoString) return '';
   const date = new Date(isoString);
@@ -270,62 +491,97 @@ const formatDateTimeDisplay = (isoString) => {
   });
 };
 
-// Formats DB ISO string for the HTML <input type="datetime-local">
-const formatForInput = (isoString) => {
-  if (!isoString) return '';
-  const date = new Date(isoString);
-  // Adjust for local timezone offset so the input displays correctly
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 16);
-};
-
-// --- MODAL ACTIONS ---
 const openCreateModal = () => {
   modalMode.value = 'create';
   form.value = {
     scheduleId: null,
-    deviceId: '',
-    action: '',
+    targetType: 'device',
+    deviceId: null,
+    deviceGroupId: null,
+    enableOverrides: false,
+    taskActionPayload: { command: '', deviceOverrides: {} },
     scheduleType: 'one_time',
     status: 'active',
-    startTime: '',
-    endTime: '',
+    startTime: null,
+    endTime: null,
     cronExpression: ''
   };
+  cronPreset.value = '*/5 * * * *';
+
+  v$.value.$reset(); // ⚡ Reset validation state
   isModalOpen.value = true;
 };
 
 const openEditModal = (schedule) => {
   modalMode.value = 'edit';
+  const isGroup = schedule.deviceGroupId !== null && schedule.deviceGroupId !== undefined;
+
+  let parsedAction = { command: '', deviceOverrides: {} };
+
+  if (typeof schedule.taskAction === 'object' && schedule.taskAction !== null) {
+    parsedAction = { ...parsedAction, ...schedule.taskAction };
+  } else if (typeof schedule.taskAction === 'string') {
+    parsedAction.command = schedule.taskAction;
+  }
+
+  if (!parsedAction.deviceOverrides) parsedAction.deviceOverrides = {};
 
   form.value = {
     scheduleId: schedule.scheduleId,
-    deviceId: schedule.deviceId,
-    action: schedule.action,
+    targetType: isGroup ? 'group' : 'device',
+    deviceId: schedule.deviceId || null,
+    deviceGroupId: schedule.deviceGroupId || null,
+    enableOverrides: Object.keys(parsedAction.deviceOverrides).length > 0,
+    taskActionPayload: parsedAction,
     scheduleType: schedule.scheduleType,
     status: schedule.status,
-    startTime: formatForInput(schedule.startTime),
-    endTime: formatForInput(schedule.endTime),
+    startTime: schedule.startTime ? new Date(schedule.startTime) : null,
+    endTime: schedule.endTime ? new Date(schedule.endTime) : null,
     cronExpression: schedule.cronExpression || ''
   };
+
+  if (isGroup && form.value.deviceGroupId) {
+    const cleanOverrides = {};
+    activeGroupDevices.value.forEach(d => {
+      if (parsedAction.deviceOverrides[d.deviceId]) {
+        cleanOverrides[d.deviceId] = parsedAction.deviceOverrides[d.deviceId];
+      }
+    });
+    form.value.taskActionPayload.deviceOverrides = cleanOverrides;
+    form.value.enableOverrides = Object.keys(cleanOverrides).length > 0;
+  }
+
+  if (form.value.scheduleType === 'recurring') {
+    cronPreset.value = ['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *', '0 8 * * *'].includes(form.value.cronExpression)
+      ? form.value.cronExpression
+      : 'custom';
+  }
+
+  v$.value.$reset(); // ⚡ Reset validation state
   isModalOpen.value = true;
 };
 
 const closeModal = () => {
-  if (isSaving.value) return;
   isModalOpen.value = false;
 };
 
 const saveSchedule = async () => {
+  // ⚡ Execute Vuelidate check instead of manual if/else blocks
+  const isFormValid = await v$.value.$validate();
+  if (!isFormValid) return;
+
+  if (!form.value.enableOverrides) {
+    form.value.taskActionPayload.deviceOverrides = {};
+  }
+
   isSaving.value = true;
 
-  // Build the payload matching your Go struct
   const payload = {
-    deviceId: form.value.deviceId,
-    action: form.value.action,
+    deviceId: form.value.targetType === 'device' ? Number(form.value.deviceId) : null,
+    deviceGroupId: form.value.targetType === 'group' ? Number(form.value.deviceGroupId) : null,
+    taskAction: form.value.taskActionPayload,
     scheduleType: form.value.scheduleType,
     status: form.value.status,
-    // Convert local datetime back to UTC ISO for the database
     startTime: new Date(form.value.startTime).toISOString(),
   };
 
@@ -340,28 +596,33 @@ const saveSchedule = async () => {
     await createScheduleApi('/schedule/create', payload, 'POST');
 
     if (!createError.value) {
-      toast.success("Schedule created successfully!");
-      await loadData(); // Refresh the table
+      toast.success(t('common.messages.created'));
+      await loadData();
       closeModal();
     } else {
-      toast.error(createError.value.message || "Failed to create schedule.");
+      toast.error(createError.value.message || t('common.messages.createError'));
     }
-
   } else {
-    // Add the UUID for updates
     payload.scheduleId = form.value.scheduleId;
-
     await updateScheduleApi('/schedule/update', payload, 'PUT');
 
     if (!updateError.value) {
-      toast.success("Schedule updated successfully!");
-      await loadData(); // Refresh the table
+      toast.success(t('common.messages.updated'));
+      await loadData();
       closeModal();
     } else {
-      toast.error(updateError.value.message || "Failed to update schedule.");
+      toast.error(updateError.value.message || t('common.messages.updateError'));
     }
   }
 
   isSaving.value = false;
 };
+
+watch(cronPreset, (newValue) => {
+  if (newValue !== 'custom') {
+    form.value.cronExpression = newValue;
+  } else {
+    form.value.cronExpression = '';
+  }
+});
 </script>

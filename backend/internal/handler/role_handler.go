@@ -63,7 +63,7 @@ func (h *RoleHandler) Upsert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.service.UpsertRole(r.Context(), &upsertRole)
+	err = h.service.UpsertRole(r.Context(), &upsertRole, authUserId)
 	if err != nil {
 		res.Message = "Error"
 		slog.ErrorContext(r.Context(), res.Message,

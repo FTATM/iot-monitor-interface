@@ -1,54 +1,62 @@
 <template>
-  <div class="flex flex-col h-full w-full p-4 overflow-hidden" :style="{ backgroundColor: widgetData.widgetColor?.bgHex || '#ffffff' }">
+  <div class="flex flex-col h-full w-full p-4 overflow-hidden" :style="backgroundStyle">
     
-    <!-- Header -->
-    <div class="bg-white px-4 py-3 border border-slate-200 shadow-sm z-10 flex justify-between items-center">
-      <h3 class="m-0 text-base font-extrabold text-black tracking-wide truncate pr-2">
-        {{ widgetData?.widgetLabel || 'New Alert' }}
+    <!-- Glassmorphism Header -->
+    <div class="backdrop-blur-md px-4 py-3 shadow-sm z-10 flex justify-between items-center rounded-t-lg">
+      <h3 class="m-0 text-base font-extrabold tracking-wide truncate pr-2" :style="{ color: widgetData.widgetStyle?.textHex || '#334155' }">
+        {{ widgetData?.widgetLabel || $t('canvasDesign.widgets.alert') }}
       </h3>
       
-      <span v-if="hasData" class="badge font-bold shrink-0" :class="criticalCount > 0 ? 'badge-error text-white' : 'badge-success text-white'">
-        {{ criticalCount }} Critical
+      <span v-if="hasData" class="badge font-bold shrink-0 text-white shadow-sm" 
+            :style="{ backgroundColor: criticalCount > 0 ? config.criticalColor : config.resolvedColor, borderColor: criticalCount > 0 ? config.criticalColor : config.resolvedColor }">
+        {{ criticalCount }} {{ config.critName }}
       </span>
     </div>
 
     <!-- Main Content Area -->
-    <div class="flex-1 w-full relative overflow-y-auto bg-white border-x border-b border-slate-200 p-2">
+    <div class="flex-1 w-full relative overflow-y-auto backdrop-blur-sm border-x border-b border-base-200/50 p-2 rounded-b-lg">
       
-      <div v-if="!hasDevices" class="absolute inset-0 flex items-center justify-center text-sm text-base-content/50 italic text-center p-4">
-        No devices selected. Open configuration to attach monitoring sources.
+      <div v-if="!hasDevices" class="absolute inset-0 flex items-center justify-center text-sm italic text-center p-4" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
+        {{ $t('common.noDevice') }}
       </div>
 
-      <div v-else-if="!hasData" class="absolute inset-0 flex flex-col items-center justify-center text-sm text-base-content/50 gap-3">
+      <div v-else-if="!hasData" class="absolute inset-0 flex flex-col items-center justify-center text-sm gap-3" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
         <span class="loading loading-spinner loading-md text-primary"></span>
-        Waiting for live data...
+        {{ $t('common.waitingData') }}
       </div>
 
       <!-- Actual Alerts List -->
       <ul v-else class="flex flex-col gap-2">
-        <li v-if="filteredAlerts.length === 0" class="text-center py-6 text-base-content/50 font-medium text-sm">
-          No alerts to display.
+        <li v-if="filteredAlerts.length === 0" class="text-center py-6 font-medium text-sm" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
+          {{ $t('alertWidget.noAlerts') }}
         </li>
         
         <li v-for="alert in filteredAlerts" :key="alert.id" 
-            class="flex items-start gap-3 p-3 rounded-lg border-l-4 shadow-sm bg-base-100/50 hover:bg-base-200/50 transition-colors"
+            class="flex items-start gap-3 p-3 rounded-lg border-l-4 shadow-sm hover:bg-base-200/20 transition-colors backdrop-blur-md"
             :style="{ borderLeftColor: getStateColor(alert.state) }">
           
           <div class="mt-0.5 shrink-0">
-            <span class="flex h-3 w-3 rounded-full" :style="{ backgroundColor: getStateColor(alert.state) }"></span>
+            <span class="flex h-3 w-3 rounded-full shadow-sm" :style="{ backgroundColor: getStateColor(alert.state) }"></span>
           </div>
 
           <div class="flex-1 min-w-0">
             <div class="flex justify-between items-start gap-2">
-              <h4 class="font-bold text-sm text-base-content truncate">
-                {{ alert.title }}
-              </h4>
-              <span class="text-xs font-semibold text-base-content/60 whitespace-nowrap">
+              <div class="flex items-center gap-2 truncate">
+                <h4 class="font-bold text-sm truncate" :style="{ color: widgetData.widgetStyle?.textHex || '#334155' }">
+                  {{ alert.title }}
+                </h4>
+                
+                <span class="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white shadow-sm"
+                      :style="{ backgroundColor: getStateColor(alert.state) }">
+                  {{ getStateName(alert.state) }}
+                </span>
+              </div>
+              <span class="text-xs font-semibold whitespace-nowrap" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
                 {{ alert.time }}
               </span>
             </div>
             
-            <p v-if="!config.compactMode" class="text-xs text-base-content/70 mt-1 line-clamp-2 leading-relaxed font-mono">
+            <p v-if="!config.compactMode" class="text-xs mt-1 line-clamp-2 leading-relaxed font-mono opacity-80" :style="{ color: widgetData.widgetStyle?.textHex || '#334155' }">
               {{ alert.desc }}
             </p>
           </div>
@@ -61,13 +69,25 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useLiveStreamStore } from '@/stores/useLiveStreamStore';
+
+const { t } = useI18n();
 
 const props = defineProps({
   widgetData: {
     type: Object,
     default: () => ({})
   }
+});
+
+const backgroundStyle = computed(() => {
+  const colorObj = props.widgetData.widgetStyle || {};
+  const c1 = colorObj.bgHex || '#ffffff';
+  if (!colorObj.useGradient) return { backgroundColor: c1 };
+  const c2 = colorObj.bgHex2 || c1; 
+  const angle = colorObj.bgGradientDir || '135deg';
+  return { background: `linear-gradient(${angle}, ${c1}, ${c2})` };
 });
 
 const liveStreamStore = useLiveStreamStore();
@@ -87,10 +107,15 @@ const config = computed(() => {
     compactMode: customData.compactMode !== undefined ? customData.compactMode : false,
     use24HourFormat: customData.use24HourFormat !== undefined ? customData.use24HourFormat : true, 
     
+    critName: customData.critName || t('alertWidget.config.defaultCritName'),
     critOp: customData.critOp || '>',
     critVal: customData.critVal !== undefined ? customData.critVal : 90,
+    
+    warnName: customData.warnName || t('alertWidget.config.defaultWarnName'),
     warnOp: customData.warnOp || '>',
     warnVal: customData.warnVal !== undefined ? customData.warnVal : 70,
+
+    resolvedName: customData.resolvedName || t('alertWidget.config.defaultResName'),
 
     criticalColor: customData.criticalColor || '#ef4444', 
     warningColor: customData.warningColor || '#f59e0b',  
@@ -102,6 +127,12 @@ const getStateColor = (state) => {
   if (state === 'critical') return config.value.criticalColor;
   if (state === 'warning') return config.value.warningColor;
   return config.value.resolvedColor;
+};
+
+const getStateName = (state) => {
+  if (state === 'critical') return config.value.critName;
+  if (state === 'warning') return config.value.warnName;
+  return config.value.resolvedName;
 };
 
 const checkCondition = (val, op, target) => {
@@ -127,7 +158,6 @@ const evaluateState = (val) => {
   return 'resolved';
 };
 
-// ⚡ THE FIX: Watch the central store and generate the alerts!
 watch(() => liveStreamStore.liveData, (newData) => {
   const rawDeviceIds = props.widgetData?.deviceIds || [];
   if (rawDeviceIds.length === 0) return;
@@ -155,8 +185,8 @@ watch(() => liveStreamStore.liveData, (newData) => {
       newAlerts[id] = {
         id: id,
         state: state,
-        title: device.name || `Device ${id}`,
-        desc: `Latest Reading: ${device.value}`,
+        title: device.name || t('common.device') + ` ${id}`,
+        desc: `${t('alertWidget.latestReading')} ${device.value}`,
         time: timeStr,
         timestamp: now
       };
@@ -166,7 +196,6 @@ watch(() => liveStreamStore.liveData, (newData) => {
   deviceAlerts.value = newAlerts;
 }, { deep: true });
 
-// Clear alerts if assigned devices are changed
 watch(
   () => props.widgetData?.deviceIds,
   (newIds, oldIds) => {

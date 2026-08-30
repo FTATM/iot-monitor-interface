@@ -28,13 +28,15 @@ func (r *userRepo) db(ctx context.Context) DBTX {
 func (r *userRepo) GetById(ctx context.Context, id int) (*model.User, error) {
 	const fname = "GetById"
 	user := &model.User{}
-	query := `SELECT user_id, first_name, last_name, active, role_id FROM "user" WHERE user_id = $1`
+	query := `SELECT user_id, first_name, last_name, active, role_id, email, tel FROM "user" WHERE user_id = $1`
 	err := r.db(ctx).QueryRow(ctx, query, id).Scan(
 		&user.UserId,
 		&user.FirstName,
 		&user.LastName,
 		&user.Active,
 		&user.RoleId,
+		&user.Email,
+		&user.Tel,
 	)
 
 	if err != nil {
@@ -64,7 +66,9 @@ func (r *userRepo) GetAll(ctx context.Context, active bool) ([]model.User, error
 			last_name, 
 			username, 
 			active, 
-			role_id 
+			role_id,
+			email,
+			tel
 		FROM "user" 
 		WHERE ($1 = false) OR ($1 = true AND deleted_at IS NULL)
 		`
@@ -104,11 +108,11 @@ func (r *userRepo) GetByUsername(ctx context.Context, username string) (*model.U
 func (r *userRepo) Create(ctx context.Context, user *model.User) error {
 	const fname = "Create"
 	query := `
-			INSERT INTO "user" (first_name, last_name, username, password_hash, active, role_id)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO "user" (first_name, last_name, username, password_hash, active, role_id, email, tel)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			RETURNING user_id
 		`
-	err := r.db(ctx).QueryRow(ctx, query, user.FirstName, user.LastName, user.Username, user.PasswordHash, user.Active, user.RoleId).Scan(&user.UserId)
+	err := r.db(ctx).QueryRow(ctx, query, user.FirstName, user.LastName, user.Username, user.PasswordHash, user.Active, user.RoleId, user.Email, user.Tel).Scan(&user.UserId)
 
 	if err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
@@ -127,10 +131,12 @@ func (r *userRepo) Update(ctx context.Context, user *model.User) error {
 				last_name = $2,
 				active = $3,
 				password_hash = COALESCE(NULLIF($4, ''), password_hash),
-				role_id = $6
+				role_id = $6,
+				email = $7,
+				tel = $8
 			WHERE user_id = $5
 		`
-	result, err := r.db(ctx).Exec(ctx, query, user.FirstName, user.LastName, user.Active, user.PasswordHash, user.UserId, user.RoleId)
+	result, err := r.db(ctx).Exec(ctx, query, user.FirstName, user.LastName, user.Active, user.PasswordHash, user.UserId, user.RoleId, user.Email, user.Tel)
 
 	if err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
@@ -189,7 +195,7 @@ func (r *userRepo) Delete(ctx context.Context, userId int) error {
 }
 
 func (r *userRepo) GetActiveById(ctx context.Context, userId int) (bool, error) {
-	const fname = "GetById"
+	const fname = "GetActiveById"
 	var userActive bool
 	query := `SELECT active FROM "user" WHERE user_id = $1`
 	err := r.db(ctx).QueryRow(ctx, query, userId).Scan(

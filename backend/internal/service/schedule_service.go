@@ -3,20 +3,20 @@ package service
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/FTATM/iot-monitor-interface/internal/model"
 )
 
 type scheduleService struct {
-	txManager    model.TransactionManager
-	prefixError  string
-	scheduleRepo model.ScheduleRepository
-	auditLogRepo model.AuditLogRepository
+	txManager            model.TransactionManager
+	prefixError          string
+	scheduleRepo         model.ScheduleRepository
+	auditLogRepo         model.AuditLogRepository
+	scheduleEngineClient model.ScheduleClient
 }
 
-func NewScheduleService(txManager model.TransactionManager, sr model.ScheduleRepository, alog model.AuditLogRepository) model.ScheduleService {
-	return &scheduleService{txManager: txManager, prefixError: "scheduleService", scheduleRepo: sr, auditLogRepo: alog}
+func NewScheduleService(txManager model.TransactionManager, sr model.ScheduleRepository, alog model.AuditLogRepository, scheduleEngineClient model.ScheduleClient) model.ScheduleService {
+	return &scheduleService{txManager: txManager, prefixError: "scheduleService", scheduleRepo: sr, auditLogRepo: alog, scheduleEngineClient: scheduleEngineClient}
 }
 
 func (s *scheduleService) GetAllDetail(ctx context.Context) ([]model.ScheduleDetail, error) {
@@ -32,11 +32,12 @@ func (s *scheduleService) GetAllDetail(ctx context.Context) ([]model.ScheduleDet
 			ScheduleId:     s.ScheduleId,
 			DeviceId:       s.DeviceId,
 			ScheduleType:   s.ScheduleType,
-			Action:         s.Action,
+			TaskAction:     s.TaskAction,
 			Status:         s.Status,
 			StartTime:      s.StartTime,
 			EndTime:        s.EndTime,
 			CronExpression: s.CronExpression,
+			DeviceGroupId:  s.DeviceGroupId,
 		}
 		scheduleDetails = append(scheduleDetails, detail)
 	}
@@ -50,8 +51,9 @@ func (s *scheduleService) CreateSchedule(ctx context.Context, createdSched *mode
 
 	sched := model.Schedule{
 		DeviceId:       createdSched.DeviceId,
-		Action:         createdSched.Action,
-		ScheduleType:   createdSched.Action,
+		DeviceGroupId:  createdSched.DeviceGroupId,
+		TaskAction:     createdSched.TaskAction,
+		ScheduleType:   createdSched.ScheduleType,
 		Status:         createdSched.Status,
 		StartTime:      createdSched.StartTime,
 		EndTime:        createdSched.EndTime,
@@ -92,6 +94,7 @@ func (s *scheduleService) CreateSchedule(ctx context.Context, createdSched *mode
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
+	s.scheduleEngineClient.SyncSchedule(ctx, sched.ScheduleId)
 
 	return nil
 
@@ -103,8 +106,9 @@ func (s *scheduleService) UpdateSchedule(ctx context.Context, updateSchedReq *mo
 	sched := model.Schedule{
 		ScheduleId:     updateSchedReq.ScheduleId,
 		DeviceId:       updateSchedReq.DeviceId,
-		Action:         updateSchedReq.Action,
-		ScheduleType:   updateSchedReq.Action,
+		DeviceGroupId:  updateSchedReq.DeviceGroupId,
+		TaskAction:     updateSchedReq.TaskAction,
+		ScheduleType:   updateSchedReq.ScheduleType,
 		Status:         updateSchedReq.Status,
 		StartTime:      updateSchedReq.StartTime,
 		EndTime:        updateSchedReq.EndTime,
@@ -143,7 +147,7 @@ func (s *scheduleService) UpdateSchedule(ctx context.Context, updateSchedReq *mo
 	}
 	audit := model.AuditLog{
 		EntityType: "schedule",
-		EntityId:   strconv.Itoa(sched.DeviceId),
+		EntityId:   sched.ScheduleId,
 		Action:     model.UpdateAction,
 		ChangedBy:  userId,
 		OldData:    oldData,
@@ -158,6 +162,7 @@ func (s *scheduleService) UpdateSchedule(ctx context.Context, updateSchedReq *mo
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
+	s.scheduleEngineClient.SyncSchedule(ctx, sched.ScheduleId)
 
 	return nil
 }

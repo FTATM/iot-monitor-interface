@@ -30,7 +30,7 @@ func (r *canvasRepo) GetAll(ctx context.Context, active bool) ([]model.Canvas, e
 	query := `
 		SELECT 
 			canvas_id, 
-			canvas_name 
+			canvas_name
 		FROM canvas 
 		WHERE ($1 = false) OR ($1 = true AND deleted_at IS NULL)
 		`
@@ -50,8 +50,8 @@ func (r *canvasRepo) GetAll(ctx context.Context, active bool) ([]model.Canvas, e
 func (r *canvasRepo) GetById(ctx context.Context, id int) (*model.Canvas, error) {
 	const fname = "GetById"
 	canvas := &model.Canvas{}
-	query := "SELECT canvas_id FROM canvas WHERE canvas_id = $1"
-	err := r.db(ctx).QueryRow(ctx, query, id).Scan(&canvas.CanvasId)
+	query := "SELECT canvas_id, canvas_name, canvas_style FROM canvas WHERE canvas_id = $1"
+	err := r.db(ctx).QueryRow(ctx, query, id).Scan(&canvas.CanvasId, &canvas.CanvasName, &canvas.CanvasStyle)
 
 	if err != nil {
 		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
@@ -61,7 +61,7 @@ func (r *canvasRepo) GetById(ctx context.Context, id int) (*model.Canvas, error)
 
 func (r *canvasRepo) GetByIds(ctx context.Context, ids []int) ([]model.Canvas, error) {
 	const fname = "GetByIds"
-	query := "SELECT canvas_id, canvas_name FROM canvas WHERE canvas_id = ANY($1)"
+	query := "SELECT canvas_id, canvas_name, canvas_style FROM canvas WHERE canvas_id = ANY($1)"
 	rows, err := r.db(ctx).Query(ctx, query, ids)
 	if err != nil {
 		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
@@ -80,7 +80,8 @@ func (r *canvasRepo) GetCanvasByUserId(ctx context.Context, userId int, active b
 	query := `
 		SELECT 
 			c.canvas_id,
-			c.canvas_name
+			c.canvas_name,
+			c.canvas_style
 		FROM "user" u
 		JOIN canvas_role cr on cr.role_id = u.role_id
 		JOIN canvas c on cr.canvas_id = c.canvas_id
@@ -238,11 +239,11 @@ func (r *canvasRepo) DeleteCanvasRole(ctx context.Context, canvasroles []model.C
 func (r *canvasRepo) Create(ctx context.Context, canvas *model.Canvas) error {
 	const fname = "Create"
 	query := `
-		INSERT INTO canvas (canvas_name)
-		VALUES ($1)
+		INSERT INTO canvas (canvas_name,canvas_style)
+		VALUES ($1,$2)
 		RETURNING canvas_id
 	`
-	err := r.db(ctx).QueryRow(ctx, query, canvas.CanvasName).Scan(&canvas.CanvasId)
+	err := r.db(ctx).QueryRow(ctx, query, canvas.CanvasName, canvas.CanvasStyle).Scan(&canvas.CanvasId)
 
 	if err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
@@ -251,15 +252,17 @@ func (r *canvasRepo) Create(ctx context.Context, canvas *model.Canvas) error {
 	return nil
 
 }
+
 func (r *canvasRepo) Update(ctx context.Context, canvas *model.Canvas) error {
 	const fname = "Update"
 	query := `
 		UPDATE canvas
 		SET 
-			canvas_name = $1
+			canvas_name = $1,
+			canvas_style = $3
 		WHERE canvas_id = $2		
 	`
-	result, err := r.db(ctx).Exec(ctx, query, canvas.CanvasName, canvas.CanvasId)
+	result, err := r.db(ctx).Exec(ctx, query, canvas.CanvasName, canvas.CanvasId, canvas.CanvasStyle)
 
 	if err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
@@ -308,4 +311,27 @@ func (r *canvasRepo) CountValidate(ctx context.Context, canvas *model.Canvas) (i
 	}
 
 	return count, nil
+}
+
+func (r *canvasRepo) ExecuteDynamicQuery(ctx context.Context, rawQuery string) ([]map[string]any, error) {
+	const fname = "ExecuteDynamicQuery"
+
+	// r.db(ctx) will automatically pull the Read-Only transaction from the context!
+	rows, err := r.db(ctx).Query(ctx, rawQuery)
+	if err != nil {
+		return nil, fmt.Errorf("[%s] query execution failed: %w", fname, err)
+	}
+	defer rows.Close()
+
+	// ⚡ Dynamically map the columns to Go types
+	results, err := pgx.CollectRows(rows, pgx.RowToMap)
+	if err != nil {
+		return nil, fmt.Errorf("[%s] failed to parse dynamic rows: %w", fname, err)
+	}
+
+	if results == nil {
+		results = []map[string]any{}
+	}
+
+	return results, nil
 }

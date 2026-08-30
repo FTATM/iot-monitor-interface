@@ -18,7 +18,6 @@ func NewScheduleEngineHandler(service model.ScheduleEngineService) *ScheduleEngi
 
 // Your main app calls this AFTER doing an INSERT or UPDATE in Postgres
 func (h *ScheduleEngineHandler) SyncSchedule(w http.ResponseWriter, r *http.Request) {
-	// r.PathValue is a new feature in Go 1.22
 	schedID := r.PathValue("id")
 	if len(schedID) < 32 {
 		http.Error(w, "Invalid UUID", http.StatusBadRequest)

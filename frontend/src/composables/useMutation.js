@@ -9,21 +9,24 @@ export function useMutation() {
   const res = ref(null)
   const baseUrl = import.meta.env.VITE_API_BASE_URL
 
-  const execute = async (url, payload, method = 'POST') => {
+  // ⚡ Added payloadType parameter (defaults to 'json')
+  const execute = async (url, payload, method = 'POST', payloadType = 'json') => {
     isLoading.value = true
     error.value = null
 
     try {
-      // Use the wrapper and pass the body
+      // ⚡ Only stringify if the type is json, otherwise pass the raw FormData object
+      const requestBody = payloadType === 'json' ? JSON.stringify(payload) : payload;
+
       const response = await fetchWithAuth(`${baseUrl}${url}`, {
         method: method,
-        body: JSON.stringify(payload)
+        body: requestBody
       })
       res.value = response;
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
-        error.value = errorData //|| { message: 'Failed to submit data' }
+        const errorData = await response.json().catch(() => "Error")
+        error.value = errorData
         return false 
       }
 
@@ -33,8 +36,6 @@ export function useMutation() {
       return true
 
     } catch (err) {
-      // This catch block now only handles actual network failures
-      // (like the server being completely down or CORS issues)
       error.value = { message: err.message }
       return false
     } finally {

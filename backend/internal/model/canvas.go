@@ -6,9 +6,10 @@ import (
 )
 
 type Canvas struct {
-	CanvasId   int       `json:"canvasId" db:"canvas_id"`
-	CanvasName string    `json:"canvasName" db:"canvas_name"`
-	CreatedAt  time.Time `json:"-" db:"created_at"`
+	CanvasId    int         `json:"canvasId" db:"canvas_id"`
+	CanvasName  string      `json:"canvasName" db:"canvas_name"`
+	CanvasStyle DynamicJSON `json:"canvasStyle" db:"canvas_style"`
+	CreatedAt   time.Time   `json:"-" db:"created_at"`
 }
 
 func (s *Canvas) IsSame(req Canvas) bool {
@@ -17,18 +18,21 @@ func (s *Canvas) IsSame(req Canvas) bool {
 	}
 
 	return s.CanvasId == req.CanvasId &&
-		s.CanvasName == req.CanvasName
+		s.CanvasName == req.CanvasName &&
+		s.CanvasStyle.AreJSONsEqual(req.CanvasStyle)
 }
 
 type CanvasDetail struct {
-	CanvasId   int      `json:"canvasId"`
-	CanvasName string   `json:"canvasName"`
-	Widgets    []Widget `json:"widgets"`
+	CanvasId    int         `json:"canvasId"`
+	CanvasName  string      `json:"canvasName"`
+	CanvasStyle DynamicJSON `json:"canvasStyle"`
+	Widgets     []Widget    `json:"widgets"`
 }
 
 type UpdateCanvas struct {
-	CanvasId   int    `json:"canvasId"`
-	CanvasName string `json:"canvasName"`
+	CanvasId    int         `json:"canvasId"`
+	CanvasName  string      `json:"canvasName"`
+	CanvasStyle DynamicJSON `json:"canvasStyle,omitempty"`
 }
 
 type UpsertCanvasRole struct {
@@ -37,7 +41,8 @@ type UpsertCanvasRole struct {
 }
 
 type CreateCanvas struct {
-	CanvasName string `json:"canvasName"`
+	CanvasName  string      `json:"canvasName"`
+	CanvasStyle DynamicJSON `json:"canvasStyle,omitempty"`
 }
 
 type CanvasRepository interface {
@@ -54,6 +59,7 @@ type CanvasRepository interface {
 	Update(ctx context.Context, canvas *Canvas) error
 	Delete(ctx context.Context, canvasId int) error
 	CountValidate(ctx context.Context, canvas *Canvas) (int, error)
+	ExecuteDynamicQuery(ctx context.Context, rawQuery string) ([]map[string]any, error)
 }
 
 type CanvasService interface {
@@ -65,4 +71,5 @@ type CanvasService interface {
 	CreateCanvas(ctx context.Context, createCanvas *CreateCanvas, authUserId int) error
 	UpdateCanvas(ctx context.Context, updateCanvas *UpdateCanvas, authUserId int) error
 	DeleteCanvas(ctx context.Context, canvasId int, authUserId int) error
+	ExecuteDynamicQuery(ctx context.Context, rawQuery string, authUserId int) ([]map[string]any, error)
 }

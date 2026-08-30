@@ -1,26 +1,23 @@
 <template>
-  <div class="flex flex-col h-full w-full p-4" :style="{ backgroundColor: widgetData.widgetColor?.bgHex || '#ffffff' }">
+  <div class="flex flex-col h-full w-full p-4 overflow-hidden" :style="backgroundStyle">
 
-    <div class="bg-white px-4 py-3 border-b border-slate-200 shadow-sm z-10 flex justify-between items-center">
-      <h3 class="m-0 text-base font-extrabold text-black tracking-wide">
-        {{ widgetData?.widgetLabel || 'New BarProgress' }}
+    <div class="backdrop-blur-md px-4 py-3 shadow-sm z-10 flex justify-between items-center rounded-lg">
+      <h3 class="m-0 text-base font-extrabold tracking-wide" :style="{ color: widgetData.widgetStyle?.textHex || '#334155' }">
+        {{ widgetData?.widgetLabel || $t('barProcess.newChart') }}
       </h3>
     </div>
 
-    <div class="flex-1 w-full min-h-[150px] relative flex flex-col justify-center">
+    <div class="flex-1 w-full min-h-[150px] relative flex flex-col justify-center mt-2">
       
-      <!-- 1. No Devices Selected State -->
-      <div v-if="!hasDevices" class="absolute inset-0 flex items-center justify-center text-sm text-base-content/50 italic text-center p-4">
-        No devices selected. Open configuration to add data sources.
+      <div v-if="!hasDevices" class="absolute inset-0 flex items-center justify-center text-sm italic text-center p-4" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
+        {{ $t('common.noDevicesConfig') }}
       </div>
 
-      <!-- 2. Loading State (Devices selected, waiting for SSE ping) -->
-      <div v-else-if="!hasData" class="absolute inset-0 flex flex-col items-center justify-center text-sm text-base-content/50 gap-3">
+      <div v-else-if="!hasData" class="absolute inset-0 flex flex-col items-center justify-center text-sm gap-3" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
         <span class="loading loading-spinner loading-md text-primary"></span>
-        Waiting for live data...
+        {{ $t('common.waitingData') }}
       </div>
 
-      <!-- 3. Actual Chart -->
       <v-chart v-else-if="isReady" class="absolute inset-0 w-full h-full" :option="chartOption" autoresize />
       
     </div>
@@ -28,10 +25,10 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted,  nextTick  } from 'vue';
+import { computed, ref, onMounted, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import VChart from 'vue-echarts';
 import { useLiveStreamStore } from '@/stores/useLiveStreamStore';
-
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { BarChart } from 'echarts/charts';
@@ -39,15 +36,23 @@ import { GridComponent, TooltipComponent } from 'echarts/components';
 
 use([CanvasRenderer, BarChart, GridComponent, TooltipComponent]);
 
+const { t } = useI18n();
+
 const props = defineProps({
-  widgetData: {
-    type: Object,
-    default: () => ({})
-  }
+  widgetData: { type: Object, default: () => ({}) }
 });
 
 const isReady = ref(false);
 const liveStreamStore = useLiveStreamStore();
+
+const backgroundStyle = computed(() => {
+  const colorObj = props.widgetData.widgetStyle || {};
+  const c1 = colorObj.bgHex || '#ffffff';
+  if (!colorObj.useGradient) return { backgroundColor: c1 };
+  const c2 = colorObj.bgHex2 || c1; 
+  const angle = colorObj.bgGradientDir || '135deg';
+  return { background: `linear-gradient(${angle}, ${c1}, ${c2})` };
+});
 
 const hasDevices = computed(() => props.widgetData?.deviceIds && props.widgetData.deviceIds.length > 0);
 const hasData = computed(() => {
@@ -57,13 +62,12 @@ const hasData = computed(() => {
 
 onMounted(async () => {
   await nextTick();
-  setTimeout(() => {
-    isReady.value = true;
-  }, 50);
+  setTimeout(() => { isReady.value = true; }, 50);
 });
 
 const chartOption = computed(() => {
   const customData = props.widgetData?.customChartData || {};
+  const chartTextColor = props.widgetData.widgetStyle?.textHex || '#334155';
 
   const trackColor = customData.trackColor || '#e2e8f0';
   const maxValue = customData.maxValue && customData.maxValue > 0 ? customData.maxValue : 100;
@@ -75,23 +79,21 @@ const chartOption = computed(() => {
   const fallbackColors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
 
   const rawDeviceIds = props.widgetData?.deviceIds || [];
-  
   let deviceNames = [];
   let deviceValues = [];
 
-  // ⚡ THE FIX: Loop strictly over the selected IDs to guarantee absolute visual ordering
   rawDeviceIds.forEach(id => {
     const data = liveStreamStore.liveData[id];
-    deviceNames.push(data ? data.name : `Device Loading...`);
+    deviceNames.push(data ? data.name : t('common.loading'));
     deviceValues.push(data ? data.value : 0);
   });
 
   const backgroundValues = deviceNames.map(() => maxValue);
 
   return {
+    textStyle: { color: chartTextColor },
     tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'none' },
+      trigger: 'axis', axisPointer: { type: 'none' },
       formatter: function (params) {
         const p = params.find(param => param.seriesName === 'Progress');
         if (!p) return '';
@@ -99,79 +101,38 @@ const chartOption = computed(() => {
         return `<strong>${p.name}</strong><br/>Value: ${p.value}${unit} (${pct}%)`;
       }
     },
-    grid: {
-      left: '2%',
-      right: '15%',
-      top: '15%',
-      bottom: '5%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'value',
-      max: maxValue,
-      show: false
-    },
-    yAxis: {
-      type: 'category',
-      data: deviceNames,
-      show: false,
-      inverse: true
-    },
+    grid: { left: '2%', right: '15%', top: '15%', bottom: '5%', containLabel: true },
+    xAxis: { type: 'value', max: maxValue, show: false },
+    yAxis: { type: 'category', data: deviceNames, show: false, inverse: true },
     series: [
       {
-        name: 'Background',
-        type: 'bar',
+        name: 'Background', type: 'bar',
         itemStyle: { color: trackColor, borderRadius: borderRadius },
-        silent: true,
-        barWidth: barThickness,
-        barGap: '-100%',
-        barCategoryGap: '60%',
+        silent: true, barWidth: barThickness, barGap: '-100%', barCategoryGap: '60%',
         data: backgroundValues,
-        label: {
-          show: true,
-          position: ['0%', '-20px'],
-          formatter: '{b}',
-          color: '#0f172a',
-          fontSize: 13,
-          fontWeight: 'bold'
-        }
+        label: { show: true, position: ['0%', '-20px'], formatter: '{b}', color: chartTextColor, fontSize: 13, fontWeight: 'bold' }
       },
       {
-        name: 'Progress',
-        type: 'bar',
+        name: 'Progress', type: 'bar',
         itemStyle: {
           borderRadius: borderRadius,
           color: function (params) {
-            // Because our Y-axis is now perfectly mapped to rawDeviceIds, this dataIndex lookup is bulletproof!
             const deviceId = rawDeviceIds[params.dataIndex];
             return deviceColorsMap[deviceId] || fallbackColors[params.dataIndex % fallbackColors.length];
           }
         },
-        barWidth: barThickness,
-        z: 3,
+        barWidth: barThickness, z: 3,
         label: {
-          show: showTextLabel,
-          position: 'right',
+          show: showTextLabel, position: 'right',
           formatter: function (params) {
             const pct = Math.round((params.value / maxValue) * 100);
             return `{pctStyle|${pct}%}`;
           },
-          rich: {
-            pctStyle: {
-              color: '#64748b',
-              fontWeight: 'normal',
-              fontSize: 12
-            }
-          }
+          rich: { pctStyle: { color: chartTextColor, fontWeight: 'bold', fontSize: 12 } }
         },
         data: deviceValues
       }
     ]
   };
 });
-
-function sameIds(a, b) {
-  if (!a || !b || a.length !== b.length) return false;
-  return a.every((id, i) => id === b[i]);
-}
 </script>

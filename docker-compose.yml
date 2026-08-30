@@ -16,6 +16,7 @@ services:
       - DB_HOST=db
       - SCHEDULE_ENGINE_URL=http://server-schedule-engine:8081
       - DEVICE_GATEWAY_URL=http://server-device-gateway:8091
+      - LOG_API_DIR=/app/logs
     volumes:
       # host_machine_folder : container_folder
       - ./backend/local_logs/api:/app/logs
@@ -39,6 +40,7 @@ services:
     environment:
       - DB_HOST=db
       - DEVICE_GATEWAY_URL=http://server-device-gateway:8091
+      - LOG_SCHEDULE_ENGINE_DIR=/app/logs
     volumes:
       # host_machine_folder : container_folder
       - ./backend/local_logs/schedule:/app/logs
@@ -64,6 +66,7 @@ services:
     environment:
       - DB_HOST=db
       - MQTT_BROKER_URL=tcp://mqtt-broker:1883
+      - LOG_DEVICE_GATEWAY_DIR=/app/logs
     volumes:
       - ./backend/local_logs/gateway:/app/logs
     logging:
@@ -99,6 +102,40 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+  nodered:
+    image: nodered/node-red:latest
+    ports:
+      - "1880:1880"
+    volumes:
+      # Persist all flows, nodes, and credentials
+      - nodered_data:/data
+    restart: unless-stopped
+    depends_on:
+      - mqtt-broker
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+  garage:
+    image: dxflrs/garage:v2.3.0
+    ports:
+      - "3900:3900" # S3 API port (Your Go app talks to this)
+      - "3902:3902" # Web routing port (For public image access)
+    volumes:
+      - ./garage_config:/etc/garage
+      - garage_data:/var/lib/garage
+    environment:
+      - GARAGE_CONFIG_FILE=/etc/garage/garage.toml
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   db:
     image: timescale/timescaledb:latest-pg18
     environment:
@@ -128,3 +165,5 @@ services:
 volumes:
   iotmonitor_postgres_data:
   mosquitto_data:
+  nodered_data:
+  garage_data:

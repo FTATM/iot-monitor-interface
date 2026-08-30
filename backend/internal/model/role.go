@@ -44,7 +44,7 @@ type RoleRepository interface {
 
 type RoleService interface {
 	Access(ctx context.Context, acc *Access) (bool, error)
-	UpsertRole(ctx context.Context, upsertRole *UpsertRole) error
+	UpsertRole(ctx context.Context, upsertRole *UpsertRole, authUserId int) error
 	GetAll(ctx context.Context) ([]Role, error)
 	GetMenuActionAvailable(ctx context.Context) ([]MainMenu, error)
 	GetDetailById(ctx context.Context, roleId int) (*RoleDetail, error)

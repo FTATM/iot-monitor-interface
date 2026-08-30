@@ -324,3 +324,73 @@ func (h *CanvasHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	respondJson(w, http.StatusOK, &res)
 }
+
+func (h *CanvasHandler) HandleRawQuery(w http.ResponseWriter, r *http.Request) {
+	type QueryRequest struct {
+		Query string `json:"query"`
+	}
+	var req QueryRequest
+	var res Response
+
+	authUserId, ok := r.Context().Value(auth.AuthUserIdKey).(int)
+	if !ok {
+		res.Message = "Can't get user id"
+		respondJson(w, http.StatusInternalServerError, &res)
+		return
+	}
+
+	acc := &model.Access{
+		UserId:     authUserId,
+		MenuName:   "Dashboard",
+		ActionName: "Query",
+	}
+
+	hasAccess, err := h.roleService.Access(r.Context(), acc)
+	if err != nil {
+		res.Message = "Error"
+		slog.ErrorContext(r.Context(), res.Message,
+			slog.String("track", err.Error()),
+		)
+		respondJson(w, http.StatusInternalServerError, &res)
+		return
+	}
+
+	if !hasAccess {
+		res.Message = "No Access"
+		respondJson(w, http.StatusBadRequest, &res)
+		return
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		res.Message = "Invalid JSON body"
+		respondJson(w, http.StatusBadRequest, &res)
+		return
+	}
+
+	if req.Query == "" {
+		res.Message = "Query cannot be empty"
+		respondJson(w, http.StatusBadRequest, &res)
+		return
+	}
+
+	results, err := h.service.ExecuteDynamicQuery(r.Context(), req.Query, authUserId)
+	if err != nil {
+		if errors.Is(err, model.ErrSecurityViolation) {
+			slog.WarnContext(r.Context(), "Malicious query blocked",
+				slog.Int("userId", authUserId),
+				slog.String("query", req.Query),
+				slog.String("reason", err.Error()),
+			)
+			res.Message = "Query execution failed: Invalid query"
+			respondJson(w, http.StatusBadRequest, &res)
+			return
+		}
+		slog.ErrorContext(r.Context(), "Dynamic query error",
+			slog.String("track", err.Error()),
+		)
+		res.Message = "Query execution failed: Invalid query"
+		respondJson(w, http.StatusBadRequest, &res)
+		return
+	}
+	res.Data = results
+	respondJson(w, http.StatusOK, &res)
+}

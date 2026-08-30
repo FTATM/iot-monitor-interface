@@ -1,33 +1,30 @@
 <template>
-  <!-- Added overflow-hidden to the main wrapper to respect grid boundaries -->
-  <div class="flex flex-col h-full w-full p-4 overflow-hidden" :style="{ backgroundColor: widgetData.widgetColor?.bgHex || '#ffffff' }">
+  <div class="flex flex-col h-full w-full p-4 overflow-hidden" :style="backgroundStyle">
     
-    <!-- Added shrink-0 so the header never squishes -->
-    <div class="bg-white px-4 py-3 border border-slate-200 shadow-sm z-10 flex justify-between items-center shrink-0">
-      <h3 class="m-0 text-base font-extrabold text-black tracking-wide truncate pr-2">
-        {{ widgetData?.widgetLabel || 'New Status' }}
+    <div class="backdrop-blur-md px-4 py-3 shadow-sm z-10 flex justify-between items-center shrink-0 rounded-lg">
+      <h3 class="m-0 text-base font-extrabold tracking-wide truncate pr-2" :style="{ color: widgetData.widgetStyle?.textHex || '#334155' }">
+        {{ widgetData?.widgetLabel || $t('statusWidget.newStatus') }}
       </h3>
       <span v-if="hasData && liveDeviceName" class="badge badge-neutral badge-lg py-4 px-4 text-sm font-bold shrink-0 shadow-sm">
         {{ liveDeviceName }}
       </span>
     </div>
 
-    <!-- Main Status Display Area: Added min-h-0 and overflow-y-auto for scrolling -->
-    <div class="flex-1 w-full min-h-0 relative p-4 overflow-y-auto flex flex-col">
+    <div class="flex-1 w-full min-h-0 relative p-4 overflow-y-auto flex flex-col mt-2">
       
-      <!-- Replaced justify-center with m-auto to fix the overflow centering bug -->
-      <div v-if="!hasDevices" class="m-auto text-sm text-base-content/50 italic text-center">
-        No device selected.
+      <div v-if="!hasDevices" class="m-auto text-sm italic text-center" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
+        {{ $t('common.noDevice') }}
       </div>
 
-      <div v-else-if="!hasData" class="m-auto flex flex-col items-center text-sm text-base-content/50 gap-3">
+      <div v-else-if="!hasData" class="m-auto flex flex-col items-center text-sm gap-3" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
         <span class="loading loading-spinner loading-md text-primary"></span>
-        Waiting for live data...
+        {{ $t('common.waitingData') }}
       </div>
       
       <div v-else class="m-auto flex flex-col items-center justify-center text-center w-full">
         <div class="flex items-baseline justify-center text-center">
-          <span v-if="config.prefix" class="font-semibold text-base-content/50 mr-2 text-2xl">
+          
+          <span v-if="config.prefix" class="font-semibold mr-2 text-2xl" :style="{ color: config.prefixColor }">
             {{ config.prefix }}
           </span>
           
@@ -36,12 +33,12 @@
             {{ evaluatedStatus.text }}
           </span>
           
-          <span v-if="config.unit" class="font-bold text-base-content/50 ml-2 text-2xl">
+          <span v-if="config.unit" class="font-bold ml-2 text-2xl" :style="{ color: config.unitColor }">
             {{ config.unit }}
           </span>
         </div>
 
-        <div v-if="config.subtext" class="mt-2 text-base-content/60 font-medium text-sm text-center whitespace-pre-line w-full">
+        <div v-if="config.subtext" class="mt-2 font-medium text-sm text-center whitespace-pre-line w-full" :style="{ color: config.subtextColor }">
           {{ config.subtext }}
         </div>
       </div>
@@ -51,14 +48,26 @@
 </template>
 
 <script setup>
-import { computed  } from 'vue';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useLiveStreamStore } from '@/stores/useLiveStreamStore';
+
+const { t } = useI18n();
 
 const props = defineProps({
   widgetData: {
     type: Object,
     default: () => ({})
   }
+});
+
+const backgroundStyle = computed(() => {
+  const colorObj = props.widgetData.widgetStyle || {};
+  const c1 = colorObj.bgHex || '#ffffff';
+  if (!colorObj.useGradient) return { backgroundColor: c1 };
+  const c2 = colorObj.bgHex2 || c1; 
+  const angle = colorObj.bgGradientDir || '135deg';
+  return { background: `linear-gradient(${angle}, ${c1}, ${c2})` };
 });
 
 const liveStreamStore = useLiveStreamStore();
@@ -74,8 +83,11 @@ const config = computed(() => {
     valueColor: customData.valueColor || '#10b981', 
     fontSize: customData.fontSize || 56, 
     prefix: customData.prefix || '',
+    prefixColor: customData.prefixColor || '#64748b',
     unit: customData.unit || '',
+    unitColor: customData.unitColor || '#64748b',      
     subtext: customData.subtext || '',
+    subtextColor: customData.subtextColor || '#64748b',
     enableConditions: customData.enableConditions || false,
     conditions: customData.conditions || []
   };
@@ -96,24 +108,12 @@ const evaluatedStatus = computed(() => {
     const isNumeric = !isNaN(numCurrent) && !isNaN(numCompare) && cond.compareValue !== '';
 
     switch (cond.operator) {
-      case '==': 
-        match = currentValue == cond.compareValue; 
-        break;
-      case '!=': 
-        match = currentValue != cond.compareValue; 
-        break;
-      case '>': 
-        match = isNumeric ? numCurrent > numCompare : currentValue > cond.compareValue; 
-        break;
-      case '<': 
-        match = isNumeric ? numCurrent < numCompare : currentValue < cond.compareValue; 
-        break;
-      case '>=': 
-        match = isNumeric ? numCurrent >= numCompare : currentValue >= cond.compareValue; 
-        break;
-      case '<=': 
-        match = isNumeric ? numCurrent <= numCompare : currentValue <= cond.compareValue; 
-        break;
+      case '==': match = currentValue == cond.compareValue; break;
+      case '!=': match = currentValue != cond.compareValue; break;
+      case '>': match = isNumeric ? numCurrent > numCompare : currentValue > cond.compareValue; break;
+      case '<': match = isNumeric ? numCurrent < numCompare : currentValue < cond.compareValue; break;
+      case '>=': match = isNumeric ? numCurrent >= numCompare : currentValue >= cond.compareValue; break;
+      case '<=': match = isNumeric ? numCurrent <= numCompare : currentValue <= cond.compareValue; break;
     }
 
     if (match) {

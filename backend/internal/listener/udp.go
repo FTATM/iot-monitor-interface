@@ -43,7 +43,8 @@ func StartUDPServer(ctx context.Context, port string, svc model.DeviceGatewaySer
 
 		packetData := buffer[:n]
 
-		var data model.DeviceDataRequest
+		//! fixed to data payload new
+		var data model.DeviceData
 		if err := json.Unmarshal(packetData, &data); err != nil {
 			slog.Debug("Invalid JSON received over UDP",
 				slog.String("ip", remoteAddr.String()),

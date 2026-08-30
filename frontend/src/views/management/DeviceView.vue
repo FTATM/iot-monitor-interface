@@ -5,16 +5,12 @@
       class="bg-base-100 shadow-sm rounded-box border border-base-200 p-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
 
       <div class="flex items-center gap-4">
-        <!-- Iconify Device Icon -->
         <div class="p-3 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
           <Icon icon="lucide:cpu" class="w-7 h-7" />
         </div>
-
-        <!-- Header Text -->
         <div>
-          <h2 class="m-0 text-2xl font-extrabold text-base-content tracking-tight">Device Management</h2>
-          <p class="mt-1 mb-0 text-base-content/60 text-sm font-medium">Manage system devices and their configuration
-            values.</p>
+          <h2 class="m-0 text-2xl font-extrabold text-base-content tracking-tight">{{ $t('device.title') }}</h2>
+          <p class="mt-1 mb-0 text-base-content/60 text-sm font-medium">{{ $t('device.subtitle') }}</p>
         </div>
       </div>
     </div>
@@ -22,84 +18,86 @@
     <!-- Devices Table -->
     <TableData :data="deviceTable" :columns="tableColumns" :initial-sorting="[{ id: 'deviceId', desc: false }]"
       :is-loading="isLoading">
-      <!-- Toolbar Action Slot -->
       <template #toolbar-actions>
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-outline btn-secondary shadow-sm mr-2 transition-all">
+            <Icon icon="lucide:download" class="w-5 h-5 mr-1" />
+            {{ $t('common.export') }}
+          </div>
+          <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32">
+            <li><a @click="exportData('json')">JSON</a></li>
+            <li><a @click="exportData('csv')">CSV</a></li>
+            <li><a @click="exportData('excel')">Excel</a></li>
+          </ul>
+        </div>
+
+        <button class="btn btn-outline btn-accent shadow-sm mr-2 transition-all" @click="openImportModal">
+          <Icon icon="lucide:upload" class="w-5 h-5 mr-1" />
+          {{ $t('common.import') }}
+        </button>
+
         <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
           <Icon icon="lucide:plus" class="w-5 h-5 mr-1" />
-          Add Device
+          {{ $t('device.addDevice') }}
         </button>
       </template>
 
-      <!-- Custom Cell Slot: 'deviceId' -->
       <template #cell-deviceId="{ value }">
         <span class="font-medium text-base-content/50">{{ value }}</span>
       </template>
 
-      <!-- Custom Cell Slot: 'protocol' -->
+      <!-- ⚡ NEW: Protocol Badge Display for nulls -->
       <template #cell-protocol="{ value }">
-        <span class="badge badge-outline badge-sm font-bold uppercase tracking-wider text-primary">
+        <span v-if="value" class="badge badge-outline badge-sm font-bold uppercase tracking-wider text-primary">
           {{ value }}
+        </span>
+        <span v-else class="badge badge-ghost badge-sm font-bold tracking-wider text-base-content/50">
+          {{ $t('common.none') }}
         </span>
       </template>
 
       <template #cell-status="{ row }">
         <div class="flex items-center gap-3">
-          <!-- Connection Dot -->
-          <div class="tooltip" :data-tip="row.isConnected ? 'Online' : 'Offline'">
-            <div class="w-3 h-3 rounded-full"
-              :class="row.isConnected ? 'bg-success shadow-[0_0_8px_rgba(0,255,0,0.5)]' : 'bg-error'">
-            </div>
-          </div>
-          <!-- Status Badge -->
           <div class="badge badge-sm font-semibold uppercase tracking-wider"
             :class="row.status ? 'badge-success' : 'badge-ghost text-base-content/50'">
-            {{ row.status ? 'Active' : 'Inactive' }}
+            {{ row.status ? $t('common.active') : $t('common.inactive') }}
           </div>
-
         </div>
       </template>
 
-      <!-- Custom Cell Slot: 'actions' -->
       <template #cell-actions="{ row }">
         <div class="flex justify-end gap-2">
           <button @click="openEditModal(row)" class="btn btn-sm btn-primary">
             <Icon icon="lucide:pencil" class="w-5 h-5" />
           </button>
-
           <button @click="openDeleteModal(row)" class="btn btn-sm btn-error text-white">
             <Icon icon="lucide:trash" class="w-5 h-5" />
           </button>
         </div>
       </template>
-
     </TableData>
 
-    <!-- DaisyUI Native Dialog Modal -->
+    <!-- Create/Edit Modal -->
     <dialog ref="deviceModal" class="modal">
       <div class="modal-box sm:w-11/12 sm:max-w-xl p-0 overflow-hidden shadow-2xl">
-
-        <!-- Modal Header -->
         <div class="px-6 py-5 border-b border-base-200 bg-base-100 flex justify-between items-center">
           <h3 class="m-0 text-xl font-extrabold text-base-content">
-            {{ isEditing ? 'Edit Device Configuration' : 'Register New Device' }}
+            {{ isEditing ? $t('device.editDevice') : $t('device.createDevice') }}
           </h3>
           <button class="btn btn-sm btn-circle btn-ghost" @click="closeModal">
             <Icon icon="lucide:x" class="w-4 h-4" />
           </button>
         </div>
 
-        <!-- Modal Body (Form) -->
         <form @submit.prevent="submitForm" autocomplete="off" class="p-6 bg-base-100">
-
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3">
 
-            <!-- Device Name -->
             <label class="form-control w-full sm:col-span-2">
               <div class="label pb-1">
-                <span class="label-text font-semibold">Device Name</span>
-                <span v-if="isEditing" class="badge badge-neutral badge-sm">Read-only</span>
+                <span class="label-text font-semibold">{{ $t('common.deviceName') }}</span>
+                <span v-if="isEditing" class="badge badge-neutral badge-sm">{{ $t('common.readOnly') }}</span>
               </div>
-              <input type="text" v-model="form.deviceName" placeholder="e.g. Main Sensor" @blur="v$.deviceName.$touch()"
+              <input type="text" v-model="form.deviceName" :placeholder="$t('device.deviceNamePlaceholder')" @blur="v$.deviceName.$touch()"
                 :disabled="isEditing"
                 :class="['input input-bordered w-full disabled:bg-base-200/50 disabled:text-base-content/60', { 'input-error': v$.deviceName.$error }]" />
               <div class="label px-1 py-1 h-6">
@@ -109,52 +107,60 @@
               </div>
             </label>
 
-            <!-- Protocol Select -->
+            <!-- ⚡ Updated: Replaced error bindings because None is accepted -->
             <label class="form-control w-full sm:col-span-2">
               <div class="label pb-1">
-                <span class="label-text font-semibold">Communication Protocol</span>
+                <span class="label-text font-semibold">{{ $t('common.protocol') }}</span>
               </div>
-              <select v-model="form.protocol" @blur="v$.protocol.$touch()"
-                :class="['select select-bordered w-full', { 'select-error': v$.protocol.$error }]">
-                <option value="" disabled>Select a protocol...</option>
+              <select v-model="form.protocol" class="select select-bordered w-full">
+                <option value="" disabled>{{ $t('common.protocolPlaceholder') }}</option>
+                <option value="none">{{ $t('common.none') }}</option>
                 <option v-for="proto in protocolList" :key="proto" :value="proto">
                   {{ proto }}
                 </option>
               </select>
-              <div class="label px-1 py-1 h-6">
-                <span v-if="v$.protocol.$error" class="label-text-alt text-error font-medium">
-                  {{ v$.protocol.$errors[0].$message }}
-                </span>
-              </div>
             </label>
 
-            <!-- ADMINISTRATIVE STATUS (User Controlled) -->
-            <div class="sm:col-span-2 p-4 bg-base-200/50 rounded-box border border-base-200">
+            <!-- ADMINISTRATIVE STATUS -->
+            <div class="sm:col-span-2 p-4 bg-base-200/50 rounded-box border border-base-200 mt-2">
               <div class="flex items-center justify-between">
                 <div>
-                  <span class="font-bold block text-sm">Active Status</span>
-                  <span class="text-xs text-base-content/60">Toggle to enable or disable monitoring.</span>
+                  <span class="font-bold block text-sm">{{ $t('device.activeStatus') }}</span>
+                  <span class="text-xs text-base-content/60">{{ $t('device.activeStatusDesc') }}</span>
                 </div>
-                <input type="checkbox" v-model="form.isActive" class="toggle toggle-primary" />
+                <input type="checkbox" v-model="form.active" class="toggle toggle-primary" />
               </div>
             </div>
 
-            <!-- NETWORK STATUS (System Managed - Only shows when editing) -->
+            <!-- NETWORK STATUS -->
             <div v-if="isEditing"
               class="sm:col-span-2 p-4 bg-base-200/50 rounded-box border border-base-200 flex flex-col gap-3 mt-1">
-              <h4 class="font-bold text-sm text-base-content uppercase tracking-wider m-0">Network Status</h4>
 
               <div class="flex items-center justify-between">
-                <span class="text-sm font-semibold">Connection</span>
+                <h4 class="font-bold text-sm text-base-content uppercase tracking-wider m-0">{{ $t('device.networkStatus') }}</h4>
+
+                <!-- ⚡ NEW: Disabled Ping Display Logic -->
+                <div v-if="!form.protocol || form.protocol === 'none'" class="badge badge-warning badge-sm font-semibold opacity-80">
+                  {{ $t('device.cannotPingNoProtocol') }}
+                </div>
+                <button v-else type="button" @click="testConnection" class="btn btn-xs btn-outline btn-secondary"
+                  :disabled="isPinging">
+                  <span v-if="isPinging" class="loading loading-spinner loading-xs"></span>
+                  <Icon v-else icon="lucide:wifi" class="w-3 h-3 mr-1" />
+                  {{ $t('device.testConnection') }}
+                </button>
+              </div>
+
+              <div class="flex items-center justify-between mt-2">
+                <span class="text-sm font-semibold">{{ $t('device.deviceStatus') }}</span>
                 <div class="badge gap-1 border-none shadow-sm"
                   :class="form.isConnected ? 'bg-success text-white' : 'bg-error text-white'">
-                  {{ form.isConnected ? 'Online' : 'Offline' }}
+                  {{ form.isConnected ? $t('common.connect') : $t('common.disconnect') }}
                 </div>
               </div>
 
-              <!-- Only show Last Seen if the device is currently Offline (isConnected is false) -->
               <div v-if="!form.isConnected" class="flex items-center justify-between">
-                <span class="text-sm font-semibold">Last Seen At</span>
+                <span class="text-sm font-semibold">{{ $t('device.lastSeenAt') }}</span>
                 <span class="text-sm font-mono text-base-content/70">
                   {{ formatLastSeen(form.lastSeenAt) }}
                 </span>
@@ -162,43 +168,123 @@
             </div>
           </div>
 
-          <!-- Modal Footer -->
           <div class="border-t border-base-200 mt-6 pt-5 flex justify-end gap-3">
-            <button type="button" class="btn btn-ghost" @click="closeModal">Cancel</button>
+            <button type="button" class="btn btn-ghost" @click="closeModal">{{ $t('common.cancel') }}</button>
             <button type="submit" class="btn btn-primary px-8 text-white">
-              {{ isEditing ? 'Save Changes' : 'Register Device' }}
+              {{ isEditing ? $t('common.save') : $t('device.createDevice') }}
             </button>
           </div>
         </form>
       </div>
-
-      <!-- Clickable backdrop to close -->
-      <form method="dialog" class="modal-backdrop">
-        <button @click="closeModal">close</button>
-      </form>
+      <form method="dialog" class="modal-backdrop"><button @click="closeModal">close</button></form>
     </dialog>
 
+    <!-- Delete Modal -->
     <dialog ref="deleteModal" class="modal z-[200]">
       <div class="modal-box">
         <h3 class="font-bold text-lg text-error flex items-center gap-2">
-          <Icon icon="lucide:alert-triangle" class="w-6 h-6" />
-          Confirm Deletion
+          <Icon icon="lucide:alert-triangle" class="w-6 h-6" /> {{ $t('common.confirmDelete') }}
         </h3>
         <p class="py-4 text-base-content/80">
-          Delete the <span class="font-bold text-base-content">"{{ deviceToDelete?.deviceName }}"</span>?
+          {{ $t('device.deleteWarning', { name: deviceToDelete?.deviceName }) }}
         </p>
         <div class="modal-action">
-          <button type="button" @click="closeDeleteModal" class="btn btn-ghost" :disabled="isDeleting">No,
-            Cancel</button>
+          <button type="button" @click="closeDeleteModal" class="btn btn-ghost" :disabled="isDeleting">
+            {{ $t('common.noCancel') }}
+          </button>
           <button type="button" @click="confirmDelete" class="btn btn-error text-white" :disabled="isDeleting">
-            <span v-if="isDeleting" class="loading loading-spinner loading-sm"></span>
-            Yes, Delete
+            <span v-if="isDeleting" class="loading loading-spinner loading-sm"></span> {{ $t('common.yesDelete') }}
           </button>
         </div>
       </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="closeDeleteModal">close</button>
-      </form>
+      <form method="dialog" class="modal-backdrop"><button @click="closeDeleteModal">close</button></form>
+    </dialog>
+
+    <!-- Import Modal (Unchanged) -->
+    <dialog ref="importModal" class="modal">
+      <div class="modal-box w-11/12 max-w-4xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+        <div class="px-6 py-5 border-b border-base-200 bg-base-100 flex justify-between items-center shrink-0">
+          <h3 class="m-0 text-xl font-extrabold text-base-content">{{ $t('device.import.title') }}</h3>
+          <button class="btn btn-sm btn-circle btn-ghost" @click="closeImportModal">
+            <Icon icon="lucide:x" class="w-4 h-4" />
+          </button>
+        </div>
+        <div class="px-6 py-4 bg-info/10 border-b border-info/20 text-sm">
+          <div class="flex gap-3 items-start">
+            <Icon icon="lucide:info" class="w-5 h-5 text-info shrink-0 mt-0.5" />
+            <div>
+              <p class="font-bold text-info-content mb-1">{{ $t('device.import.requirementsTitle') }}</p>
+              <ul class="list-disc list-inside space-y-1 text-info-content/80 ml-1">
+                <li><strong>{{ $t('device.import.supportedFormats') }}</strong></li>
+                <li><strong>{{ $t('device.import.requiredColumns') }}</strong>
+                  <code class="bg-base-100/50 text-info font-bold px-1.5 py-0.5 rounded">deviceName</code>,
+                  <code class="bg-base-100/50 text-info font-bold px-1.5 py-0.5 rounded">protocol</code>,
+                  <code class="bg-base-100/50 text-info font-bold px-1.5 py-0.5 rounded">status (active/inactive)</code>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-6 bg-base-100 flex-1 overflow-y-auto">
+          <div class="flex items-center gap-4 mb-6">
+            <input type="file" @change="handleFileSelect" accept=".csv, .json, .xlsx"
+              class="file-input file-input-bordered file-input-primary w-full max-w-xs" />
+            <button @click="validateImportFile" :disabled="!selectedFile || isLoadingValidateImport"
+              class="btn btn-primary text-white">
+              <span v-if="isLoadingValidateImport" class="loading loading-spinner loading-sm"></span>
+              {{ $t('device.import.validateFile') }}
+            </button>
+            <div v-show="validateImportError" class="font-semibold text-error">
+              <span>{{ validateImportError?.message || "Error" }}</span>
+            </div>
+          </div>
+
+          <div v-if="validationResults.length > 0" class="overflow-x-auto border border-base-200 rounded-box">
+            <table class="table table-sm table-zebra w-full">
+              <thead class="bg-base-200/50">
+                <tr>
+                  <th>{{ $t('common.deviceName') }}</th>
+                  <th>{{ $t('common.protocol') }}</th>
+                  <th>{{ $t('common.active') }}</th>
+                  <th>{{ $t('device.import.validation') }}</th>
+                  <th>{{ $t('device.import.message') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, idx) in validationResults" :key="idx">
+                  <td>{{ row.deviceName }}</td>
+                  <td>{{ row.protocol }}</td>
+                  <td>
+                    <span class="badge badge-sm font-semibold uppercase tracking-wider"
+                      :class="row.active === false ? 'badge-ghost text-base-content/50' : 'badge-success'">
+                      {{ row.active === false ? $t('common.inactive') : $t('common.active') }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="badge badge-sm" :class="row.isValid ? 'badge-success' : 'badge-error'">
+                      {{ row.isValid ? $t('device.import.pass') : $t('device.import.error') }}
+                    </span>
+                  </td>
+                  <td :class="row.isValid ? 'text-success' : 'text-error font-medium'">
+                    {{ row.message }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="border-t border-base-200 p-5 flex justify-end gap-3 shrink-0">
+          <button type="button" class="btn btn-ghost" @click="closeImportModal">{{ $t('common.cancel') }}</button>
+          <button @click="confirmImport" :disabled="!canConfirmImport || isImporting"
+            class="btn btn-success text-white px-8">
+            <span v-if="isImporting" class="loading loading-spinner loading-sm"></span>
+            {{ $t('device.import.confirmImport') }}
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button @click="closeImportModal">close</button></form>
     </dialog>
   </div>
   <NoAccess v-else />
@@ -206,6 +292,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useMutation } from '@/composables/useMutation';
 import { useFetch } from '@/composables/useFetch';
 import { useVuelidate } from '@vuelidate/core';
@@ -215,93 +302,96 @@ import { Icon } from '@iconify/vue';
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
 import TableData from '@/components/TableData.vue';
+import { useDownload } from '@/composables/useDownload';
 
-// --- COMPOSABLES ---
+const { t } = useI18n();
+
+const permissionStore = usePermissionStore();
+const { hasPermission } = permissionStore;
+
 const { error: deviceAddedError, execute: deviceAddedApi } = useMutation();
 const { error: deviceUpdatedError, execute: deviceUpdatedApi } = useMutation();
 const { data: deviceAllFetch, isLoading, error: deviceAllFetchError, execute: deviceAllFetchApi } = useFetch();
 const { error: deviceDeletedError, isLoading: isDeleting, execute: deviceDeletedApi } = useMutation();
-
-// New API call for the Protocol types
+const { data: validateImportData, isLoading: isLoadingValidateImport, error: validateImportError, execute: validateImportApi } = useMutation();
+const { isDownloading: isExporting, error: exportError, executeDownload } = useDownload();
 const { data: protocolData, error: protocolError, execute: protocolFetchApi } = useFetch();
 
-// --- STORE ---
-const permissionStore = usePermissionStore();
-const { hasPermission } = permissionStore;
+const { data: pingData, isLoading: isPinging, error: pingError, execute: pingApi } = useFetch();
 
-// --- STATE ---
 const deviceModal = ref(null);
 const isEditing = ref(false);
 const editingDeviceId = ref(null);
 const deviceTable = ref([]);
 const deleteModal = ref(null);
 const deviceToDelete = ref(null);
-const protocolList = ref([]); // Holds the array of protocol strings
+const protocolList = ref([]);
 
-const tableColumns = [
-  {
-    header: 'ID',
-    accessorKey: 'deviceId',
-    meta: { headerClass: 'w-16', cellClass: 'font-bold' }
-  },
-  {
-    header: 'Device Name',
-    accessorKey: 'deviceName'
-  },
-  {
-    header: 'Protocol',
-    accessorKey: 'protocol' // Added Protocol Column
-  },
-  {
-    header: 'Status',
-    accessorKey: 'status'
-  },
-  {
-    header: 'Actions',
-    id: 'actions',
-    enableSorting: false,
-    meta: { headerClass: 'text-right', cellClass: 'text-right' }
-  }
-];
+const importModal = ref(null);
+const selectedFile = ref(null);
+const isImporting = ref(false);
+const validationResults = ref([]);
+
+const tableColumns = computed(() => [
+  { header: t('common.id'), accessorKey: 'deviceId', meta: { headerClass: 'w-16', cellClass: 'font-bold' } },
+  { header: t('common.deviceName'), accessorKey: 'deviceName' },
+  { header: t('common.protocol'), accessorKey: 'protocol' },
+  { header: t('common.status'), accessorKey: 'status' },
+  { header: t('common.actions'), id: 'actions', enableSorting: false, meta: { headerClass: 'text-right', cellClass: 'text-right' } }
+]);
 
 const form = ref({
   deviceName: '',
-  protocol: '', // Added protocol state
-  isActive: true,
+  protocol: 'none', // ⚡ Default to none
+  active: true,
   isConnected: false,
   lastSeenAt: null
 });
 
-// --- HELPER FUNCTIONS ---
+const canConfirmImport = computed(() => {
+  return validationResults.value.length > 0 && validationResults.value.every(row => row.isValid);
+});
+
 const formatLastSeen = (timestamp) => {
-  if (!timestamp) return 'Never connected';
+  if (!timestamp) return t('device.neverConnected');
   const date = new Date(timestamp);
   return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 
-// --- VALIDATION RULES ---
+// ⚡ REMOVED: Strict protocol validation. It is now completely optional!
 const rules = computed(() => ({
-  deviceName: {
-    required: helpers.withMessage('Device name is required', required)
-  },
-  protocol: {
-    required: helpers.withMessage('Protocol selection is required', required)
-  }
+  deviceName: { required: helpers.withMessage(t('device.validation.deviceNameRequired'), required) }
 }));
 
 const v$ = useVuelidate(rules, form);
 
-// --- METHODS ---
+const testConnection = async () => {
+  if (!editingDeviceId.value) return;
+
+  await pingApi(`/device/pingdevice?deviceId=${editingDeviceId.value}`);
+
+  if (!pingError.value && pingData.value) {
+    const isOnline = !!pingData.value.data.connection;
+    form.value.isConnected = isOnline;
+
+    if (isOnline) {
+      toast.success(t('device.messages.pingSuccess'));
+      const tblRecord = deviceTable.value.find(d => d.deviceId === editingDeviceId.value);
+      if (tblRecord) tblRecord.isConnected = true;
+    } else {
+      toast.warning(t('device.messages.pingOffline'));
+      const tblRecord = deviceTable.value.find(d => d.deviceId === editingDeviceId.value);
+      if (tblRecord) tblRecord.isConnected = false;
+    }
+  } else {
+    toast.error(pingError.value?.message || t('device.messages.pingFailed'));
+  }
+};
+
 const openCreateModal = () => {
   isEditing.value = false;
   editingDeviceId.value = null;
-  form.value = {
-    deviceName: '',
-    protocol: '',
-    isActive: true,
-    isConnected: false,
-    lastSeenAt: null
-  };
+  form.value = { deviceName: '', protocol: 'none', active: true, isConnected: false, lastSeenAt: null };
   v$.value.$reset();
   deviceModal.value.showModal();
 };
@@ -311,8 +401,8 @@ const openEditModal = (device) => {
   editingDeviceId.value = device.deviceId;
   form.value = {
     deviceName: device.deviceName,
-    protocol: device.protocol || '',
-    isActive: device.isActive,
+    protocol: device.protocol || 'none', // ⚡ Map null to 'none' for UI
+    active: device.active,
     isConnected: device.isConnected,
     lastSeenAt: device.lastSeenAt
   };
@@ -320,60 +410,45 @@ const openEditModal = (device) => {
   deviceModal.value.showModal();
 };
 
-const closeModal = () => {
-  deviceModal.value.close();
-};
-
-const openDeleteModal = (device) => {
-  deviceToDelete.value = device;
-  deleteModal.value.showModal();
-};
-
-const closeDeleteModal = () => {
-  deleteModal.value.close();
-  deviceToDelete.value = null;
-};
+const closeModal = () => deviceModal.value.close();
+const openDeleteModal = (device) => { deviceToDelete.value = device; deleteModal.value.showModal(); };
+const closeDeleteModal = () => { deleteModal.value.close(); deviceToDelete.value = null; };
 
 const confirmDelete = async () => {
   if (!deviceToDelete.value) return;
-
   await deviceDeletedApi(`/device/delete/${deviceToDelete.value.deviceId}`, null, 'DELETE');
-
   if (!deviceDeletedError.value) {
-    toast.success(`Device ${deviceToDelete.value.deviceName} deleted successfully!`);
+    toast.success(t('common.messages.deleteSuccess', { name: deviceToDelete.value.deviceName }));
     await loadTable();
     closeDeleteModal();
   } else {
-    toast.error(deviceDeletedError.value?.message || "Failed to delete device");
+    toast.error(deviceDeletedError.value?.message || t('common.messages.deleteError'));
   }
 };
 
 const loadProtocols = async () => {
   await protocolFetchApi('/device/getprotocoltype');
   if (!protocolError.value && protocolData.value) {
-    // Assuming the API returns an array of strings in the data property
-
     protocolList.value = protocolData.value.data || [];
   } else {
-    toast.error("Failed to load protocol types");
+    toast.error(t('common.messages.loadError'));
   }
 };
 
 const loadTable = async () => {
   await deviceAllFetchApi('/device/getalldetail');
-
   if (!deviceAllFetchError.value && deviceAllFetch.value) {
     deviceTable.value = []
     for (let i of deviceAllFetch.value.data) {
       deviceTable.value.push({
         deviceId: i.deviceId,
         deviceName: i.deviceName,
-        protocol: i.protocol, // Map the protocol data for the table
+        protocol: i.protocol,
         valueData: i.valueData,
-        isActive: i.isActive,
+        active: i.active,
         isConnected: i.isConnected,
         lastSeenAt: i.lastSeenAt,
-        status: i.isActive // Mapping isActive to status for the table badge
+        status: i.active
       });
     }
   }
@@ -381,42 +456,81 @@ const loadTable = async () => {
 
 const submitForm = async () => {
   const isFormValid = await v$.value.$validate();
+  if (!isFormValid) return;
 
-  if (!isFormValid) {
-    return;
-  }
-
-  const payload = {
-    deviceName: form.value.deviceName,
-    protocol: form.value.protocol, // Included in payload
-    isActive: form.value.isActive
+  const payload = { 
+    deviceName: form.value.deviceName, 
+    protocol: form.value.protocol === 'none' ? null : form.value.protocol, // ⚡ Strip 'none' back to null for DB
+    active: form.value.active 
   };
 
   if (isEditing.value) {
     payload.deviceId = editingDeviceId.value;
-    delete payload.deviceName; // Device name is read-only on edit
-
+    delete payload.deviceName;
     await deviceUpdatedApi('/device/update', payload, 'PUT');
-
     if (!deviceUpdatedError.value) {
       closeModal();
-      toast.success("Device updated successfully!");
+      toast.success(t('common.messages.updated'));
       await loadTable();
     } else {
-      toast.error(deviceUpdatedError.value?.message || "Failed to update device");
+      toast.error(deviceUpdatedError.value?.message || t('common.messages.updateError'));
     }
-
   } else {
-    // Note: Creating requires passing an array of objects to this specific endpoint
     await deviceAddedApi('/device/create', [payload], 'POST');
-
     if (!deviceAddedError.value) {
       closeModal();
-      toast.success("Device created successfully!");
+      toast.success(t('common.messages.created'));
       await loadTable();
     } else {
-      toast.error(deviceAddedError.value?.message || "Failed to create device");
+      toast.error(deviceAddedError.value?.message || t('common.messages.createError'));
     }
+  }
+};
+
+const openImportModal = () => { validateImportError.value = ""; selectedFile.value = null; validationResults.value = []; importModal.value.showModal(); };
+const closeImportModal = () => { importModal.value.close(); selectedFile.value = null; validationResults.value = []; };
+const handleFileSelect = (event) => { selectedFile.value = event.target.files[0]; };
+
+const validateImportFile = async () => {
+  if (!selectedFile.value) return;
+  const formData = new FormData();
+  formData.append('file', selectedFile.value);
+  await validateImportApi('/device/import/validate', formData, 'POST', 'form')
+  if (validateImportError.value) { validationResults.value = []; return }
+  validationResults.value = validateImportData.value.data;
+};
+
+const confirmImport = async () => {
+  if (!canConfirmImport.value) return;
+  isImporting.value = true;
+  const payload = validationResults.value.map(row => ({ deviceName: row.deviceName, protocol: row.protocol, active: row.active }));
+  await deviceAddedApi('/device/create', payload, 'POST');
+  if (!deviceAddedError.value) {
+    toast.success(t('device.messages.importSuccess', { count: payload.length }));
+    await loadTable();
+    closeImportModal();
+  } else {
+    toast.error(deviceAddedError.value?.message || t('device.messages.importFailed'));
+  }
+  isImporting.value = false;
+};
+
+const exportData = async (format) => {
+  const extension = format === 'excel' ? 'xlsx' : format;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}`;
+  const filename = `devices_export_${timestamp}.${extension}`;
+  const success = await executeDownload(`/device/export/devices?format=${format}`, filename);
+  if (success) {
+    toast.success(t('device.messages.exportSuccess', { format: format.toUpperCase() }));
+  } else {
+    toast.error(exportError.value?.message || t('device.messages.exportFailed', { format: format.toUpperCase() }));
   }
 };
 

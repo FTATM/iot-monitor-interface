@@ -1,83 +1,88 @@
 <template>
   <div class="flex flex-col gap-5">
 
-    <!-- Data Source & History Options -->
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
-      <h4 class="font-bold text-sm mb-3 text-base-content">Data Options</h4>
+      <h4 class="font-bold text-sm mb-3 text-base-content">{{ $t('lineChart.config.dataOptions') }}</h4>
       
       <div class="grid grid-cols-2 gap-4 mb-3">
         <label class="form-control w-full">
-          <div class="label pb-1"><span class="label-text font-semibold">History Range</span></div>
+          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('common.historyRange') }}</span></div>
           <select v-model="localConfig.historyRange" class="select select-bordered select-sm w-full">
-            <option value="0">Live Data Only</option>
-            <option value="15m">Last 15 Minutes</option>
-            <option value="30m">Last 30 Minutes</option>
-            <option value="1h">Last 1 Hour</option>
-            <option value="3h">Last 3 Hours</option>
-            <option value="6h">Last 6 Hours</option>
-            <option value="24h">Last 24 Hours</option>
-            <option value="7d">Last 7 Days</option>
-            <option value="custom">Custom Absolute Range...</option>
+            <option value="0">{{ $t('common.timeRanges.live') }}</option>
+            <option value="15m">{{ $t('common.timeRanges.m15') }}</option>
+            <option value="30m">{{ $t('common.timeRanges.m30') }}</option>
+            <option value="1h">{{ $t('common.timeRanges.h1') }}</option>
+            <option value="3h">{{ $t('common.timeRanges.h3') }}</option>
+            <option value="6h">{{ $t('common.timeRanges.h6') }}</option>
+            <option value="24h">{{ $t('common.timeRanges.h24') }}</option>
+            <option value="7d">{{ $t('common.timeRanges.d7') }}</option>
+            <option value="custom">{{ $t('common.timeRanges.custom') }}</option>
           </select>
         </label>
         
         <label class="form-control w-full">
-          <div class="label pb-1"><span class="label-text font-semibold">Max Data Points</span></div>
-          <!-- Replaced hardcoded max points with user configuration -->
+          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('common.maxDataPoints') }}</span></div>
           <input type="number" v-model.number="localConfig.maxPoints" class="input input-bordered input-sm w-full" placeholder="100" />
         </label>
       </div>
 
-      <!-- "From" and "To" Date/Time Pickers -->
       <div v-if="localConfig.historyRange === 'custom'" class="grid grid-cols-2 gap-4 p-3 mt-2 bg-base-100 rounded-lg border border-base-300">
         <label class="form-control w-full">
-          <div class="label pb-1"><span class="label-text font-semibold text-primary">From</span></div>
-          <input type="datetime-local" step="1" v-model="localConfig.customFrom" class="input input-bordered input-sm w-full border-primary" />
+          <div class="label pb-1"><span class="label-text font-semibold text-primary">{{ $t('common.from') }}</span></div>
+          <VueDatePicker v-model="localConfig.customFrom" :is-24="true" auto-apply :preset-dates="presetDates"
+            format="yyyy-MM-dd HH:mm" teleport-center>
+            <template #input-icon>
+              <Icon icon="lucide:calendar-clock" class="w-5 h-5 ml-3 text-base-content/50" />
+            </template>
+          </VueDatePicker>
         </label>
         
         <label class="form-control w-full">
-          <div class="label pb-1"><span class="label-text font-semibold text-primary">To</span></div>
-          <input type="datetime-local" step="1" v-model="localConfig.customTo" class="input input-bordered input-sm w-full border-primary" />
+          <div class="label pb-1"><span class="label-text font-semibold text-primary">{{ $t('common.to') }}</span></div>
+          <VueDatePicker v-model="localConfig.customTo" :is-24="true" auto-apply :preset-dates="presetDates"
+            format="yyyy-MM-dd HH:mm" teleport-center>
+            <template #input-icon>
+              <Icon icon="lucide:calendar-clock" class="w-5 h-5 ml-3 text-base-content/50" />
+            </template>
+          </VueDatePicker>
         </label>
       </div>
     </div>
 
-    <!-- Chart Features & Regression Analysis -->
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
-      <h4 class="font-bold text-sm mb-3 text-base-content">Regression Analysis</h4>
+      <h4 class="font-bold text-sm mb-3 text-base-content">{{ $t('scatterChart.config.regressionAnalysis') }}</h4>
 
       <div class="flex flex-col gap-3 mb-4">
         <label class="cursor-pointer label justify-start gap-4">
           <input type="checkbox" v-model="localConfig.showRegression" class="toggle toggle-primary" />
-          <span class="label-text font-semibold">Show Linear Regression Trendline</span>
+          <span class="label-text font-semibold">{{ $t('scatterChart.config.showRegression') }}</span>
         </label>
         <label class="cursor-pointer label justify-start gap-4">
           <input type="checkbox" v-model="localConfig.use24HourFormat" class="toggle toggle-secondary toggle-sm" />
-          <span class="label-text font-semibold">Use 24-Hour Time Format</span>
+          <span class="label-text font-semibold">{{ $t('common.use24HourFormat') }}</span>
         </label>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
         <label class="form-control w-full">
           <div class="label pb-1">
-            <span class="label-text font-semibold">X-Axis Label</span>
+            <span class="label-text font-semibold">{{ $t('scatterChart.config.xAxisLabel') }}</span>
           </div>
-          <input type="text" v-model="localConfig.xAxisName" class="input input-bordered input-sm w-full" placeholder="e.g., Time" />
+          <input type="text" v-model="localConfig.xAxisName" class="input input-bordered input-sm w-full" :placeholder="$t('scatterChart.config.timePlaceholder')" />
         </label>
 
         <label class="form-control w-full">
           <div class="label pb-1">
-            <span class="label-text font-semibold">Y-Axis Label</span>
+            <span class="label-text font-semibold">{{ $t('scatterChart.config.yAxisLabel') }}</span>
           </div>
-          <input type="text" v-model="localConfig.yAxisName" class="input input-bordered input-sm w-full" placeholder="e.g., Value" />
+          <input type="text" v-model="localConfig.yAxisName" class="input input-bordered input-sm w-full" :placeholder="$t('scatterChart.config.valuePlaceholder')" />
         </label>
       </div>
     </div>
 
-    <!-- Device Specific Colors (Optional parity with Line Chart) -->
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
       <div class="flex justify-between items-center mb-4">
-        <h4 class="font-bold text-sm text-base-content m-0">Device Colors</h4>
+        <h4 class="font-bold text-sm text-base-content m-0">{{ $t('common.deviceColors') }}</h4>
       </div>
       
       <div class="flex flex-col gap-2">
@@ -86,7 +91,7 @@
           <span class="text-sm font-semibold flex-1">{{ device.deviceName }}</span>
         </div>
         <div v-if="activeDevices.length === 0" class="text-sm text-base-content/50 py-2 text-center">
-          No devices selected.
+          {{ $t('common.noDevice') }}
         </div>
       </div>
     </div>
@@ -96,6 +101,8 @@
 
 <script setup>
 import { ref, watch, onMounted, computed } from 'vue';
+import { Icon } from '@iconify/vue';
+import { VueDatePicker } from '@vuepic/vue-datepicker';
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
@@ -104,6 +111,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue']);
+
+const presetDates = ref([{ label: 'Today', value: new Date() }]);
 
 const activeDevices = computed(() => {
   if (!props.selectedDeviceIds) return [];
@@ -118,7 +127,7 @@ const localConfig = ref({
   historyRange: props.modelValue.historyRange || '1h',
   customFrom: props.modelValue.customFrom || '', 
   customTo: props.modelValue.customTo || '',
-  maxPoints: props.modelValue.maxPoints || 100, // Replaces static 20 limit
+  maxPoints: props.modelValue.maxPoints || 100, 
   showRegression: props.modelValue.showRegression !== undefined ? props.modelValue.showRegression : true,
   xAxisName: props.modelValue.xAxisName || '',
   yAxisName: props.modelValue.yAxisName || '',

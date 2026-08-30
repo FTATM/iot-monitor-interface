@@ -14,5 +14,8 @@ type RouterHandlers struct {
 	ScheduleEngine *handler.ScheduleEngineHandler
 	Role           *handler.RoleHandler
 	DeviceGateway  *handler.DeviceGatewayHandler
+	LogReport      *handler.LogReportHandler
+	Notification   *handler.NotificationHandler
+	S3File         *handler.S3File
 	// Add more as the app grows...
 }

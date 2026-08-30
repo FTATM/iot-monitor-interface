@@ -1,9 +1,11 @@
 package listener
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/FTATM/iot-monitor-interface/internal/model"
@@ -17,65 +19,25 @@ func StartMQTTClient(ctx context.Context, brokerURL string, svc model.DeviceGate
 	opts.SetAutoReconnect(true)
 	opts.SetMaxReconnectInterval(5 * time.Second)
 
-	// Define what happens when a message arrives
-	opts.SetDefaultPublishHandler(func(client mqtt.Client, msg mqtt.Message) {
-		var data model.DeviceDataRequest
-		// 1. Validate JSON syntax
-		if err := json.Unmarshal(msg.Payload(), &data); err != nil {
-			slog.Debug("Invalid JSON syntax received over MQTT",
-				slog.String("error", err.Error()),
-				slog.String("topic", msg.Topic()),
-				slog.String("payload", string(msg.Payload())),
-			)
-			return
-		}
-
-		// 2. Validate required struct fields (Ensure DeviceId is valid)
-		if data.DeviceId <= 0 {
-			slog.Debug("MQTT message rejected: invalid or missing DeviceId",
-				slog.String("topic", msg.Topic()),
-				slog.String("payload", string(msg.Payload())),
-			)
-			return
-		}
-
-		sessionSvc.MarkDeviceActive(data.DeviceId)
-		// Pass to the Batcher Service!
-		svc.Add(data)
-	})
-
-	// opts.SetDefaultPublishHandler(func(client mqtt.Client, msg mqtt.Message) {
-	// 	var data map[string]int
-	// 	// 2. Validate required struct fields (Ensure DeviceId is valid)
-	// 	// if data.DeviceId <= 0 {
-	// 	// 	slog.Debug("MQTT message rejected: invalid or missing DeviceId",
-	// 	// 		slog.String("topic", msg.Topic()),
-	// 	// 		slog.String("payload", string(msg.Payload())),
-	// 	// 	)
-	// 	// 	return
-	// 	// }
-
-	// 	// sessionSvc.MarkDeviceActive(data.DeviceId)
-	// 	// Pass to the Batcher Service!
-	// 	err := json.NewDecoder(msg.Payload()).Decode(&data)
-	// 	if err != nil {
-	// 		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
-	// 		return
-	// 	}
-	// 	defer r.Body.Close()
-	// 	var device model.DeviceDataRequest
-	// 	device.DeviceName = data
-	// 	svc.Add(data)
-	// })
-
 	opts.SetOnConnectHandler(func(c mqtt.Client) {
 		slog.InfoContext(ctx, "Connected to MQTT Broker!")
-		// Subscribe to a wildcard topic where devices publish data
-		topic := "devices/+/data"
-		if token := c.Subscribe(topic, 1, nil); token.Wait() && token.Error() != nil {
+
+		// Subscribe to Single Device Topic
+		singleTopic := "device/+/data"
+		sHandler := singleHandler(ctx, svc, sessionSvc)
+		if token := c.Subscribe(singleTopic, 1, sHandler); token.Wait() && token.Error() != nil {
 			slog.ErrorContext(ctx, "Failed to subscribe to MQTT topic", slog.String("error", token.Error().Error()))
 		} else {
-			slog.InfoContext(ctx, "Subscribed to MQTT topic", slog.String("topic", topic))
+			slog.InfoContext(ctx, "Subscribed to MQTT topic", slog.String("topic", singleTopic))
+		}
+
+		// Subscribe to Group Device Topic
+		groupTopic := "device-group/+/data"
+		gHandler := groupHandler(ctx, svc, sessionSvc)
+		if token := c.Subscribe(groupTopic, 1, gHandler); token.Wait() && token.Error() != nil {
+			slog.ErrorContext(ctx, "Failed to subscribe to group topic", slog.String("error", token.Error().Error()))
+		} else {
+			slog.InfoContext(ctx, "Subscribed to MQTT topic", slog.String("topic", groupTopic))
 		}
 	})
 
@@ -90,4 +52,133 @@ func StartMQTTClient(ctx context.Context, brokerURL string, svc model.DeviceGate
 	<-ctx.Done()
 	slog.Info("Shutting down MQTT listener...")
 	client.Disconnect(250)
+}
+
+// --- HANDLERS ---
+func singleHandler(ctx context.Context, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService) mqtt.MessageHandler {
+	return func(client mqtt.Client, msg mqtt.Message) {
+		topicParts := strings.Split(msg.Topic(), "/")
+		if len(topicParts) != 3 {
+			return
+		}
+		deviceName := topicParts[1]
+
+		// 1. Resolve Name to ID using TTL Cache
+		var deviceId int
+		if cachedData, ok := getFromCache(&deviceNameCache, deviceName); ok {
+			deviceId = cachedData.(int)
+		} else {
+			dbId, err := svc.GetDeviceIdByName(ctx, deviceName)
+			if err != nil || dbId <= 0 {
+				slog.Warn("Unknown device name received", slog.String("name", deviceName))
+				return
+			}
+			setToCache(&deviceNameCache, deviceName, dbId, cacheTTL)
+			deviceId = dbId
+		}
+
+		payload := bytes.TrimSpace(msg.Payload())
+		if len(payload) == 0 {
+			return
+		}
+
+		var incomingData []model.DeviceDataPayloadReq
+		switch payload[0] {
+		case '[':
+			if err := json.Unmarshal(payload, &incomingData); err != nil {
+				return
+			}
+		case '{':
+			var single model.DeviceDataPayloadReq
+			if err := json.Unmarshal(payload, &single); err != nil {
+				return
+			}
+			incomingData = append(incomingData, single)
+		default:
+			return
+		}
+
+		// Process incoming array
+		for _, d := range incomingData {
+			deviceData := model.DeviceData{
+				DeviceId:  deviceId,
+				ValueData: d.ValueData,
+			}
+			sessionSvc.MarkDeviceActive(deviceData.DeviceId)
+			svc.Add(deviceData)
+		}
+	}
+}
+
+func groupHandler(ctx context.Context, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService) mqtt.MessageHandler {
+	return func(client mqtt.Client, msg mqtt.Message) {
+		topicParts := strings.Split(msg.Topic(), "/")
+		if len(topicParts) != 3 {
+			return
+		}
+		groupName := topicParts[1]
+
+		// 1. Resolve Group Name to Device Names using TTL Cache
+		var deviceNames []string
+		if cachedData, ok := getFromCache(&deviceGroupNameCache, groupName); ok {
+			deviceNames = cachedData.([]string)
+		} else {
+			groupDataList, err := svc.GetDeviceIdByGroupName(ctx, groupName)
+			if err != nil || len(groupDataList) == 0 {
+				slog.Warn("Unknown or empty group name received", slog.String("groupName", groupName))
+				return
+			}
+			deviceNames = groupDataList[0].DeviceNames
+			setToCache(&deviceGroupNameCache, groupName, deviceNames, cacheTTL)
+		}
+
+		payload := bytes.TrimSpace(msg.Payload())
+		if len(payload) == 0 {
+			return
+		}
+
+		var incomingData []model.DeviceDataPayloadReq
+		switch payload[0] {
+		case '[':
+			if err := json.Unmarshal(payload, &incomingData); err != nil {
+				return
+			}
+		case '{':
+			var single model.DeviceDataPayloadReq
+			if err := json.Unmarshal(payload, &single); err != nil {
+				return
+			}
+			incomingData = append(incomingData, single)
+		default:
+			return
+		}
+
+		// 2. FAN-OUT: Loop through EVERY device in the group
+		for _, dName := range deviceNames {
+
+			// Resolve Device ID using TTL Cache
+			var deviceId int
+			if cachedData, ok := getFromCache(&deviceNameCache, dName); ok {
+				deviceId = cachedData.(int)
+			} else {
+				dbId, err := svc.GetDeviceIdByName(ctx, dName)
+				if err != nil || dbId <= 0 {
+					slog.Warn("Unknown device in group", slog.String("device", dName), slog.String("group", groupName))
+					continue
+				}
+				setToCache(&deviceNameCache, dName, dbId, cacheTTL)
+				deviceId = dbId
+			}
+
+			// Process payload for this specific device
+			for _, d := range incomingData {
+				deviceData := model.DeviceData{
+					DeviceId:  deviceId,
+					ValueData: d.ValueData,
+				}
+				sessionSvc.MarkDeviceActive(deviceData.DeviceId)
+				svc.Add(deviceData)
+			}
+		}
+	}
 }

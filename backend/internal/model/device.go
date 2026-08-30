@@ -5,14 +5,16 @@ import (
 	"time"
 )
 
+const DeviceScale = 1000
+
 type Device struct {
 	DeviceId   int        `json:"deviceId" db:"device_id"`
 	DeviceName string     `json:"deviceName" db:"device_name"`
-	Protocol   string     `json:"protocol" db:"protocol"`
+	Protocol   *string    `json:"protocol" db:"protocol"`
 	ValueData  int        `json:"valueData,omitempty" db:"value_data"`
 	CreatedAt  time.Time  `json:"-" db:"created_at"`
 	DeletedAt  *time.Time `json:"-" db:"deleted_at"`
-	IsActive   bool       `json:"isActive" db:"is_active"`
+	Active     bool       `json:"active" db:"active"`
 	LastSeenAt *time.Time `json:"lastSeenAt,omitempty" db:"last_seen_at"`
 }
 
@@ -23,53 +25,77 @@ func (s *Device) IsSame(req Device) bool {
 
 	return s.DeviceId == req.DeviceId &&
 		// s.DeviceName == req.DeviceName &&
-		s.IsActive == req.IsActive &&
+		s.Active == req.Active &&
 		s.Protocol == req.Protocol
 }
 
 type DeviceDetail struct {
-	DeviceId    int        `json:"deviceId"`
-	DeviceName  string     `json:"deviceName"`
-	Protocol    string     `json:"protocol,omitempty" db:"protocol"`
-	ValueData   int        `json:"valueData,omitempty"`
-	IsActive    bool       `json:"isActive,omitempty"`
-	IsConnected bool       `json:"isConnected,omitempty"`
-	LastSeenAt  *time.Time `json:"lastSeenAt,omitempty"`
+	DeviceId   int        `json:"deviceId"`
+	DeviceName string     `json:"deviceName"`
+	Protocol   *string    `json:"protocol,omitempty" db:"protocol"`
+	ValueData  int        `json:"valueData,omitempty"`
+	Active     bool       `json:"active,omitempty"`
+	LastSeenAt *time.Time `json:"lastSeenAt,omitempty"`
 }
 
 type DeviceCreate struct {
-	DeviceName string `json:"deviceName"`
-	Protocol   string `json:"protocol"`
-	IsActive   bool   `json:"isActive"`
+	DeviceName string  `json:"deviceName"`
+	Protocol   *string `json:"protocol"`
+	Active     bool    `json:"active"`
 }
 
 type DeviceUpdate struct {
-	DeviceId int    `json:"deviceId"`
-	Protocol string `json:"protocol"`
-	IsActive bool   `json:"isActive"`
+	DeviceId int     `json:"deviceId"`
+	Protocol *string `json:"protocol"`
+	Active   bool    `json:"active"`
 }
 
 type ChartDeviceData struct {
 	DeviceName string `json:"deviceName"`
 	ValueData  int    `json:"valueData"`
 }
+
 type ChartData struct {
 	DeviceData map[int]ChartDeviceData `json:"deviceData"`
+}
+
+type TriggerCommandReq struct {
+	DeviceIds  []int       `json:"deviceIds"`
+	IsGroup    bool        `json:"isGroup"`
+	TaskAction DynamicJSON `json:"taskAction"`
+}
+
+type CommandDeviceInfo struct {
+	DeviceId      int     `db:"device_id"`
+	DeviceName    string  `db:"device_name"`
+	Protocol      *string `db:"protocol"`
+	GroupId       *int    `db:"group_id"`
+	GroupProtocol *string `db:"group_protocol"`
 }
 
 type DeviceRepository interface {
 	GetById(ctx context.Context, id int) (*Device, error)
 	GetAll(ctx context.Context, active bool) ([]Device, error)
+	GetAllName(ctx context.Context, active bool) ([]Device, error)
 	Create(ctx context.Context, device []Device) error
 	Update(ctx context.Context, device *Device) error
 	Delete(ctx context.Context, deviceId int) error
 	GetProtocolType(ctx context.Context) ([]string, error)
 	GetByIdChartDeviceData(ctx context.Context, id int) (ChartDeviceData, error)
 	GetDeviceDataLogRange(ctx context.Context, deviceIds []int, fromTime, toTime time.Time, maxPoints int) ([]DeviceDataLog, error)
-
 	GetAggregatedData(ctx context.Context, deviceIds []int, fromTime, toTime time.Time, bucketInterval string) ([]DeviceDataLog, error)
 	GetRawData(ctx context.Context, deviceIds []int, fromTime, toTime time.Time, limit int) ([]DeviceDataLog, error)
 	CountData(ctx context.Context, deviceIds []int, fromTime, toTime time.Time) (int, error)
+	GetDeviceGroupById(ctx context.Context, deviceGroupId int) (*DeviceGroup, error)
+	GetDeviceIdByDeviceGroupIds(ctx context.Context, deviceGroupId []int) (map[int][]int, error)
+	GetAllDeviceGroup(ctx context.Context) ([]DeviceGroup, error)
+	CreateGroup(ctx context.Context, deviceGroup *DeviceGroup) error
+	UpdateGroup(ctx context.Context, deviceGroup *DeviceGroup) error
+	DeleteGroup(ctx context.Context, deviceGroupId int) error
+	CreateGroupMap(ctx context.Context, groupId int, deviceIds []int) error
+	DeleteGroupMap(ctx context.Context, groupId int, deviceIds []int) error
+	GetByIds(ctx context.Context, id []int, active bool) ([]Device, error)
+	GetDeviceForCommandByIds(ctx context.Context, deviceIds []int) ([]CommandDeviceInfo, error)
 }
 
 type DeviceService interface {
@@ -83,4 +109,9 @@ type DeviceService interface {
 	AddClient(deviceID string, clientChan chan ChartData)
 	RemoveClient(deviceID string, clientChan chan ChartData)
 	GetChartHistory(ctx context.Context, deviceId []int, maxPoints int, from, to time.Time) (map[int][][2]float64, error)
+	GetDeviceGroupDetail(ctx context.Context) ([]DeviceGroupDetail, error)
+	CreateDeviceGroup(ctx context.Context, createDeviceG CreateDeviceGroup, authUserId int) error
+	UpdateDeviceGroup(ctx context.Context, updateDeviceG UpdateDeviceGroup, authUserId int) error
+	DeleteDeviceGroup(ctx context.Context, deviceGroupId, authUserId int) error
+	GetDeviceForCommandByIds(ctx context.Context, deviceIds []int) ([]CommandDeviceInfo, error)
 }

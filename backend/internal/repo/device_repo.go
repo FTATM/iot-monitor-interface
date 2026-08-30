@@ -31,8 +31,8 @@ func (r *deviceRepo) db(ctx context.Context) DBTX {
 func (r *deviceRepo) GetById(ctx context.Context, id int) (*model.Device, error) {
 	const fname = "GetById"
 	device := &model.Device{}
-	query := "SELECT device_id, device_name, is_active, protocol FROM device WHERE device_id = $1"
-	err := r.db(ctx).QueryRow(ctx, query, id).Scan(&device.DeviceId, &device.DeviceName, &device.IsActive, &device.Protocol)
+	query := "SELECT device_id, device_name, active, protocol FROM device WHERE device_id = $1"
+	err := r.db(ctx).QueryRow(ctx, query, id).Scan(&device.DeviceId, &device.DeviceName, &device.Active, &device.Protocol)
 
 	if err != nil {
 		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
@@ -48,9 +48,31 @@ func (r *deviceRepo) GetAll(ctx context.Context, active bool) ([]model.Device, e
 		device_name, 
 		protocol,
 		value_data,
-		created_at, 
-        is_active, 
+        active, 
 		last_seen_at 
+    FROM device
+	WHERE ($1 = false) OR ($1 = true AND deleted_at IS NULL)
+	`
+	rows, err := r.db(ctx).Query(ctx, query, active)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	devices, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.Device])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return devices, nil
+}
+
+func (r *deviceRepo) GetAllName(ctx context.Context, active bool) ([]model.Device, error) {
+	const fname = "GetAll"
+	query := `
+	SELECT 
+		device_id, 
+		device_name, 
+        active
     FROM device
 	WHERE ($1 = false) OR ($1 = true AND deleted_at IS NULL)
 	`
@@ -78,7 +100,7 @@ func (r *deviceRepo) Create(ctx context.Context, devices []model.Device) error {
         INSERT INTO device (
 			device_name,
 			protocol,
-			is_active
+			active
         ) 
         VALUES ($1, $2,$3) 
         RETURNING device_id
@@ -89,7 +111,7 @@ func (r *deviceRepo) Create(ctx context.Context, devices []model.Device) error {
 			query,
 			device.DeviceName,
 			device.Protocol,
-			device.IsActive,
+			device.Active,
 		)
 	}
 
@@ -115,11 +137,11 @@ func (r *deviceRepo) Update(ctx context.Context, device *model.Device) error {
 	query := `
 			UPDATE device
 			SET 
-				is_active = $1,
+				active = $1,
 				protocol = $3
 			WHERE device_id = $2
 		`
-	result, err := r.db(ctx).Exec(ctx, query, device.IsActive, device.DeviceId, device.Protocol)
+	result, err := r.db(ctx).Exec(ctx, query, device.Active, device.DeviceId, device.Protocol)
 
 	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		if pgErr.Code == "23505" {
@@ -142,7 +164,7 @@ func (r *deviceRepo) Delete(ctx context.Context, deviceId int) error {
 	query := `
 			UPDATE device
 			SET 
-				is_active = false,
+				active = false,
 				deleted_at = CURRENT_TIMESTAMP
 			WHERE device_id = $1
 		`
@@ -222,6 +244,7 @@ func (r *deviceRepo) GetDeviceDataLogRange(ctx context.Context, deviceIds []int,
 }
 
 func (r *deviceRepo) CountData(ctx context.Context, deviceIds []int, fromTime, toTime time.Time) (int, error) {
+	const fname = "CountData"
 	query := `
 		SELECT COUNT(*) 
 		FROM device_data_log 
@@ -231,11 +254,16 @@ func (r *deviceRepo) CountData(ctx context.Context, deviceIds []int, fromTime, t
 	`
 	var count int
 	err := r.db(ctx).QueryRow(ctx, query, deviceIds, fromTime, toTime).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
 	return count, err
 }
 
 // 2. Fetch Pure Raw Data (No bucketing, exactly as inserted)
 func (r *deviceRepo) GetRawData(ctx context.Context, deviceIds []int, fromTime, toTime time.Time, limit int) ([]model.DeviceDataLog, error) {
+	const fname = "GetRawData"
 	query := `
 		SELECT device_id, received_at, value_data
 		FROM device_data_log
@@ -245,13 +273,19 @@ func (r *deviceRepo) GetRawData(ctx context.Context, deviceIds []int, fromTime, 
 	`
 	rows, err := r.db(ctx).Query(ctx, query, deviceIds, fromTime, toTime, limit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.DeviceDataLog])
+
+	result, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.DeviceDataLog])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+	return result, nil
 }
 
 // 3. Fetch Aggregated Data (Using time_bucket and last() to protect the browser)
 func (r *deviceRepo) GetAggregatedData(ctx context.Context, deviceIds []int, fromTime, toTime time.Time, bucketInterval string) ([]model.DeviceDataLog, error) {
+	const fname = "GetAggregatedData"
 	query := `
 		SELECT 
 			device_id, 
@@ -264,7 +298,272 @@ func (r *deviceRepo) GetAggregatedData(ctx context.Context, deviceIds []int, fro
 	`
 	rows, err := r.db(ctx).Query(ctx, query, deviceIds, fromTime, toTime, bucketInterval)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.DeviceDataLog])
+	result, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.DeviceDataLog])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+	return result, nil
+}
+
+func (r *deviceRepo) GetDeviceGroupById(ctx context.Context, deviceGroupId int) (*model.DeviceGroup, error) {
+	const fname = "GetDeviceGroupById"
+	deviceGroup := model.DeviceGroup{}
+	query := `
+		SELECT 
+			group_id,
+			group_name,
+			description,
+			protocol	
+    	FROM device_group
+		WHERE group_id = $1
+	`
+	err := r.db(ctx).QueryRow(ctx, query, deviceGroupId).Scan(&deviceGroup.GroupId, &deviceGroup.GroupName, &deviceGroup.Description, &deviceGroup.Protocol)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return &deviceGroup, nil
+}
+
+func (r *deviceRepo) GetDeviceIdByDeviceGroupIds(ctx context.Context, deviceGroupIds []int) (map[int][]int, error) {
+	const fname = "GetDeviceIdByDeviceGroupId"
+	query := `
+		SELECT 
+			group_id,
+			device_id
+    	FROM device_group_map
+		WHERE group_id = ANY($1::INT[])
+	`
+	rows, err := r.db(ctx).Query(ctx, query, deviceGroupIds)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	devicesGroupMaps, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.DeviceGroupMap])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	dmap := make(map[int][]int)
+	for _, m := range devicesGroupMaps {
+		dmap[m.GroupId] = append(dmap[m.GroupId], m.DeviceId)
+
+	}
+
+	return dmap, nil
+}
+
+func (r *deviceRepo) GetAllDeviceGroup(ctx context.Context) ([]model.DeviceGroup, error) {
+	const fname = "GetAllDeviceGroup"
+	query := `
+		SELECT 
+			group_id,
+			group_name,
+			description,
+			protocol
+    	FROM device_group
+	`
+	rows, err := r.db(ctx).Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	devicesGroups, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.DeviceGroup])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return devicesGroups, nil
+}
+
+func (r *deviceRepo) CreateGroup(ctx context.Context, deviceGroup *model.DeviceGroup) error {
+	const fname = "CreateGroup"
+	query := `
+			INSERT INTO device_group (group_name,description,protocol)
+			VALUES ($1, $2, $3)
+			RETURNING group_id
+		`
+	err := r.db(ctx).QueryRow(ctx, query, deviceGroup.GroupName, deviceGroup.Description, deviceGroup.Protocol).Scan(&deviceGroup.GroupId)
+	if err != nil {
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+			if pgErr.Code == "23505" {
+				return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, model.ErrDuplicate)
+			} else {
+				return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+			}
+		}
+	}
+
+	return nil
+
+}
+
+func (r *deviceRepo) UpdateGroup(ctx context.Context, deviceGroup *model.DeviceGroup) error {
+	const fname = "UpdateGroup"
+	query := `
+			UPDATE device_group 
+			SET group_name = $2,
+				description = $3,
+				protocol = $4
+			WHERE group_id = $1
+		`
+	result, err := r.db(ctx).Exec(ctx, query, deviceGroup.GroupId, deviceGroup.GroupName, deviceGroup.Description, deviceGroup.Protocol)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, pgx.ErrNoRows)
+	}
+
+	return nil
+
+}
+
+func (r *deviceRepo) DeleteGroup(ctx context.Context, deviceGroupId int) error {
+	const fname = "DeleteGroup"
+	// if len(ids) == 0 {
+	// 	return nil
+	// }
+
+	query := `DELETE FROM device_group WHERE group_id = $1`
+
+	result, err := r.db(ctx).Exec(ctx, query, deviceGroupId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, pgx.ErrNoRows)
+	}
+
+	return nil
+}
+
+func (r *deviceRepo) CreateGroupMap(ctx context.Context, groupId int, deviceIds []int) error {
+	const fname = "CreateGroupMap"
+	if len(deviceIds) == 0 {
+		return nil
+	}
+
+	batch := &pgx.Batch{}
+	query := `
+        INSERT INTO device_group_map (
+            group_id,
+            device_id
+        ) 
+        VALUES ($1, $2)`
+
+	// 1. Queue all the queries
+	for _, id := range deviceIds {
+		batch.Queue(
+			query,
+			groupId,
+			id,
+		)
+	}
+
+	// 2. Send the batch in one network trip
+	br := r.db(ctx).SendBatch(ctx, batch)
+	defer br.Close() // Ensure the batch is closed
+
+	// 3. Read the results and check for errors
+	var insertedCount int64
+	for i := range deviceIds {
+		// Use Exec() for INSERT/UPDATE/DELETE without RETURNING
+		commandTag, err := br.Exec()
+		if err != nil {
+			return fmt.Errorf("[%s]>[%s] failed at index %d (deviceId: %d): %w", r.prefixError, fname, i, deviceIds[i], err)
+		}
+
+		// Count how many rows were actually inserted
+		insertedCount += commandTag.RowsAffected()
+	}
+
+	if int(insertedCount) != len(deviceIds) {
+		return fmt.Errorf("[%s]>[%s] expected %d inserts, but got %d", r.prefixError, fname, len(deviceIds), insertedCount)
+	}
+
+	return nil
+}
+
+func (r *deviceRepo) DeleteGroupMap(ctx context.Context, groupId int, deviceIds []int) error {
+	const fname = "DeleteGroupMap"
+	if len(deviceIds) == 0 {
+		return nil
+	}
+
+	query := `DELETE FROM device_group_map WHERE group_id = $1 AND device_id = ANY($2::INT[])`
+
+	result, err := r.db(ctx).Exec(ctx, query, groupId, deviceIds)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	if result.RowsAffected() != int64(len(deviceIds)) {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, pgx.ErrNoRows)
+	}
+
+	return nil
+}
+
+func (r *deviceRepo) GetByIds(ctx context.Context, id []int, active bool) ([]model.Device, error) {
+	const fname = "GetByIds"
+	query := `
+	SELECT 
+		device_id, 
+		device_name, 
+		protocol,
+		value_data,
+        active
+    FROM device
+	WHERE (($1 = false) OR ($1 = true AND deleted_at IS NULL))
+		AND device_id = ANY($2::INT[])
+	`
+	rows, err := r.db(ctx).Query(ctx, query, active, id)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	devices, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.Device])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return devices, nil
+}
+
+func (r *deviceRepo) GetDeviceForCommandByIds(ctx context.Context, deviceIds []int) ([]model.CommandDeviceInfo, error) {
+	const fname = "GetDeviceForCommandByIds"
+
+	// ⚡ UPDATED: Joins through device_group_map to get the group protocol
+	query := `
+	SELECT 
+		d.device_id, 
+		d.device_name, 
+		d.protocol,
+		g.group_id,
+		g.protocol AS group_protocol
+	FROM device d
+	LEFT JOIN device_group_map m ON d.device_id = m.device_id
+	LEFT JOIN device_group g ON m.group_id = g.group_id
+	WHERE d.device_id = ANY($1::INT[])
+	  AND d.deleted_at IS NULL
+	  AND d.active = true;
+	`
+
+	rows, err := r.db(ctx).Query(ctx, query, deviceIds)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	// Use RowToStructByNameLax to map the SQL result to CommandDeviceInfo
+	devices, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.CommandDeviceInfo])
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return devices, nil
 }

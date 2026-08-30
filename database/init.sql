@@ -2,10 +2,11 @@ CREATE TABLE IF NOT EXISTS widget (
     widget_id SERIAL,
     widget_type_id INT NOT NULL,
     canvas_id INT NOT NULL,
+    device_group_id INT,
     device_id_s INTEGER[],
     widget_label TEXT,
     layout_data JSONB NOT NULL,
-    widget_color JSONB,
+    widget_style JSONB,
     custom_chart_data JSONB,
     CONSTRAINT pk_widget PRIMARY KEY (widget_id)
 );
@@ -16,7 +17,7 @@ CREATE INDEX IF NOT EXISTS ix_device_gin ON widget USING GIN (device_id_s);
 CREATE TABLE IF NOT EXISTS widget_type (
     widget_type_id SERIAL,
     widget_type_name TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT now(),
     CONSTRAINT pk_widget_type PRIMARY KEY (widget_type_id),
     CONSTRAINT uq_widget_type UNIQUE (widget_type_name)
 );
@@ -24,11 +25,12 @@ CREATE TABLE IF NOT EXISTS widget_type (
 CREATE TABLE IF NOT EXISTS canvas (
     canvas_id SERIAL,
     canvas_name TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ DEFAULT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    deleted_at TIMESTAMPTZ,
+    canvas_style JSONB,
     CONSTRAINT pk_canvas PRIMARY KEY (canvas_id)
 );
-CREATE INDEX ix_canvas_undelete ON canvas (canvas_id) WHERE deleted_at IS NULL;
+CREATE INDEX ix_canvas_un_delete ON canvas (canvas_id) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS "user" (
     user_id SERIAL,
@@ -36,28 +38,31 @@ CREATE TABLE IF NOT EXISTS "user" (
     last_name TEXT,
     username TEXT,
     password_hash TEXT, 
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ DEFAULT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    deleted_at TIMESTAMPTZ,
     active BOOL DEFAULT FALSE,
     role_id INT,
+    email TEXT,
+    tel TEXT,
     CONSTRAINT pk_user PRIMARY KEY (user_id)
 );
-CREATE INDEX ix_user_undelete ON "user" (user_id) WHERE deleted_at IS NULL;
+CREATE INDEX ix_user_un_delete ON "user" (user_id) WHERE deleted_at IS NULL;
 
 CREATE TYPE device_protocol_type AS ENUM ('MQTT', 'TCP','UDP','HTTP');
 CREATE TABLE IF NOT EXISTS device (
     device_id SERIAL,
     device_name TEXT NOT NULL,
-    protocol device_protocol_type NOT NULL,
+    protocol device_protocol_type,
     value_data INT DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ DEFAULT NULL,
-    is_active BOOL NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    deleted_at TIMESTAMPTZ,
+    active BOOL NOT NULL DEFAULT FALSE,
     last_seen_at TIMESTAMPTZ,
+    last_alert_triggered_at TIMESTAMPTZ,
     CONSTRAINT pk_device_id PRIMARY KEY (device_id)
 )WITH (fillfactor = 70); -- for table HOT Updates
-CREATE INDEX ix_device_undelete ON device (device_id) WHERE deleted_at IS NULL;
+CREATE INDEX ix_device_un_delete ON device (device_id) WHERE deleted_at IS NULL;
 
 CREATE UNIQUE INDEX uq_device_name_active
 ON device (device_name) 
@@ -90,13 +95,11 @@ CREATE TABLE IF NOT EXISTS device_data_log (
     id BIGSERIAL,
     device_id INT NOT NULL,
     value_data INT NOT NULL,
-    source TEXT NOT NULL,
     received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT pk_device_data_log PRIMARY KEY (id, received_at)
 );
 SELECT create_hypertable('device_data_log', by_range('received_at'));
 CREATE INDEX IF NOT EXISTS ix_device_data_log_device_id ON device_data_log (device_id, received_at DESC);
-CREATE INDEX IF NOT EXISTS ix_device_data_log_source ON device_data_log (source, received_at DESC);
 
 ALTER TABLE device_data_log SET (
     timescaledb.compress,
@@ -111,23 +114,24 @@ CREATE TYPE schedule_status AS ENUM ('active', 'completed', 'cancelled');
 
 CREATE TABLE schedule (
     schedule_id UUID DEFAULT gen_random_uuid(),
-    device_id INT NOT NULL,
-    action TEXT NOT NULL, 
+    device_id INT,
+    device_group_id INT,
+    task_action JSONB NOT NULL, 
     schedule_type schedule_type NOT NULL,
     status schedule_status NOT NULL DEFAULT 'active',
     start_time TIMESTAMPTZ NOT NULL, 
     end_time TIMESTAMPTZ, 
     cron_expression TEXT, 
     last_run_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT pk_schedule_id PRIMARY KEY (schedule_id)
 );
 
 CREATE TABLE IF NOT EXISTS role (
     role_id SERIAL,
     role_name TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT pk_role_id PRIMARY KEY (role_id),
     CONSTRAINT uq_role_name UNIQUE (role_name)
 );
@@ -135,7 +139,7 @@ CREATE TABLE IF NOT EXISTS role (
 CREATE TABLE IF NOT EXISTS menu (
     menu_id SERIAL,
     menu_name TEXT NOT NULL,
-    parent_id INT DEFAULT NULL,
+    parent_id INT,
     CONSTRAINT pk_menu_id PRIMARY KEY (menu_id),
     CONSTRAINT uq_menu_name UNIQUE (menu_name),
     CONSTRAINT fk_menu_parent FOREIGN KEY (parent_id) REFERENCES menu(menu_id) ON DELETE CASCADE
@@ -173,3 +177,51 @@ CREATE TABLE IF NOT EXISTS canvas_role (
     CONSTRAINT fk_cr_canvas FOREIGN KEY (canvas_id) REFERENCES canvas(canvas_id) ON DELETE CASCADE,
     CONSTRAINT fk_cr_role FOREIGN KEY (role_id) REFERENCES role(role_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS user_notification (
+    user_id INT,
+    email_active BOOLEAN NOT NULL DEFAULT FALSE,
+    sms_active BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT pk_user_notif PRIMARY KEY (user_id),
+    CONSTRAINT fk_user_notifi_user FOREIGN KEY (user_id) REFERENCES "user" (user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS ix_user_notif_email ON user_notification (email_active) WHERE email_active = TRUE;
+CREATE INDEX IF NOT EXISTS ix_user_notif_sms ON user_notification (sms_active) WHERE sms_active = TRUE;
+
+CREATE TABLE IF NOT EXISTS device_rule_notification (
+    rule_id SERIAL,
+    device_id INT NOT NULL,
+    condition TEXT NOT NULL, -- e.g., '>', '<', '==', '>=', '<='
+    threshold INT NOT NULL,
+    reason TEXT,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT pk_device_rule_notif PRIMARY KEY (rule_id),
+    CONSTRAINT fk_device_rule_notif_device FOREIGN KEY (device_id) REFERENCES device(device_id) ON DELETE CASCADE
+)WITH (fillfactor = 70);
+
+CREATE INDEX IF NOT EXISTS ix_device_rule_notif_device ON device_rule_notification (device_id, active);
+
+CREATE TABLE IF NOT EXISTS device_group (
+    group_id SERIAL,
+    group_name TEXT NOT NULL UNIQUE,
+    protocol device_protocol_type,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT pk_device_group PRIMARY KEY (group_id)
+);
+
+CREATE TABLE IF NOT EXISTS device_group_map (
+    group_id INT NOT NULL,
+    device_id INT NOT NULL,
+    CONSTRAINT pk_device_group_map PRIMARY KEY (group_id, device_id),
+    CONSTRAINT fk_device_map_group FOREIGN KEY (group_id) REFERENCES device_group(group_id) ON DELETE CASCADE,
+    CONSTRAINT fk_device_map_device FOREIGN KEY (device_id) REFERENCES device(device_id) ON DELETE CASCADE
+);
+
+-- Index for fast lookups when you want to find all groups for a specific device
+CREATE INDEX IF NOT EXISTS ix_device_group_map_device ON device_group_map(device_id);

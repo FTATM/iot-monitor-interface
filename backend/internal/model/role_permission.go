@@ -1,7 +1,7 @@
 package model
 
 type RolePermission struct {
-	RoleId   int `json:"roleId" db:"role_id"`
+	RoleId   int `json:"roleId,omitempty" db:"role_id"`
 	MenuId   int `json:"menuId" db:"menu_id"`
 	ActionId int `json:"actionId" db:"action_id"`
 }

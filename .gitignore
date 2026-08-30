@@ -1,3 +1,4 @@
 .env
 .env.local
 /backend/local_logs/
+/backend/log

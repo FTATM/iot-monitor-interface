@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -19,56 +20,56 @@ import (
 )
 
 func main() {
-	// Initialize the logger first so we can catch startup errors
 	initLogger()
 
 	slog.Info("Starting application initialization...")
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	// 2. Listen for cancellation signals
+	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	application, err := app.InitializeScheduleEngine(ctx)
+	// 3. Initialize dependency graph
+	application, err := app.InitializeScheduleEngine(rootCtx)
 	if err != nil {
 		slog.Error("Failed to initialize schedule engine", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
-	defer application.Close()
-
+	// 4. Start the server in a goroutine and capture fatal runtime errors
+	serverErr := make(chan error, 1)
 	go func() {
-		if err := application.Run(); err != nil && err != http.ErrServerClosed {
-			slog.Error("Server schedule engine crashed", slog.String("error", err.Error()))
-			os.Exit(1)
+		if err := application.Run(rootCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
 		}
 	}()
 
-	<-ctx.Done()
-	slog.Info("\nShutdown signal received...")
+	// 5. Block until SIGINT/SIGTERM or unexpected server error
+	select {
+	case <-rootCtx.Done():
+		slog.Info("Shutdown signal received, starting graceful teardown...")
+	case err := <-serverErr:
+		slog.Error("Server crashed unexpectedly", slog.String("error", err.Error()))
+	}
+
+	// 6. Execute graceful shutdown with a dedicated timeout context
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelShutdown()
+
+	application.Close(shutdownCtx)
+	slog.Info("Application terminated cleanly")
 }
 
 func initLogger() {
-	logDir := os.Getenv("LOG_SCHEDULE_ENGINE_DIR")
-	if logDir == "" {
-		// Fallback to a local "log" folder if the env var is missing
-		logDir = "log"
-	}
-	var err error
-	logMaxSize, err := strconv.Atoi(os.Getenv("LOG_SCHEDULE_ENGINE_MAX_SIZE"))
-	if err != nil {
-		panic("Failed to pass env MaxSize: " + err.Error())
-	}
-	logMaxBackup, err := strconv.Atoi(os.Getenv("LOG_SCHEDULE_ENGINE_MAX_BACKUP"))
-	if err != nil {
-		panic("Failed to pass env MaxBackups: " + err.Error())
-	}
-	logMaxAge, err := strconv.Atoi(os.Getenv("LOG_SCHEDULE_ENGINE_MAX_AGE"))
-	if err != nil {
-		panic("Failed to pass env MaxAge: " + err.Error())
-	}
+	logDir := app.GetEnvOrDefault("LOG_SCHEDULE_ENGINE_DIR", "log/schedule")
+
+	logMaxSize := app.GetEnvIntOrDefault("LOG_SCHEDULE_ENGINE_MAX_SIZE", 10)
+	logMaxBackup := app.GetEnvIntOrDefault("LOG_SCHEDULE_ENGINE_MAX_BACKUP", 5)
+	logMaxAge := app.GetEnvIntOrDefault("LOG_SCHEDULE_ENGINE_MAX_AGE", 28)
 
 	// Safely create the directory if it doesn't exist yet
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		// If we can't create the log folder, panic before the app starts
-		panic("Failed to create log directory: " + err.Error())
+		panic(fmt.Sprintf("Failed to create log directory: %s | error: %s", logDir, err.Error()))
 	}
 
 	// Set up the lumberjack file writer

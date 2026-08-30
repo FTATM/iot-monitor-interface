@@ -40,6 +40,9 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, pgx.ErrNoRows) {
 			res.Message = "Invalid username or password."
 			code = http.StatusBadRequest
+		} else if errors.Is(err, model.ErrNotActive) {
+			res.Message = "User Not Active"
+			code = http.StatusBadRequest
 		} else {
 			res.Message = "Error"
 			code = http.StatusInternalServerError

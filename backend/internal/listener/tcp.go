@@ -60,7 +60,8 @@ func handleTCPConnection(ctx context.Context, conn net.Conn, svc model.DeviceGat
 	for scanner.Scan() {
 		rawLine := scanner.Bytes()
 
-		var data model.DeviceDataRequest
+		//! fixed to data payload new
+		var data model.DeviceData
 		if err := json.Unmarshal(rawLine, &data); err != nil {
 			slog.Debug("Invalid JSON received over TCP",
 				slog.String("ip", remoteAddr),

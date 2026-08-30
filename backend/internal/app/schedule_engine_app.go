@@ -19,41 +19,45 @@ import (
 )
 
 type ServerScheduler struct {
-	DB              *pgxpool.Pool
-	Server          *http.Server
-	ScheduleService model.ScheduleEngineService
+	dB              *pgxpool.Pool
+	server          *http.Server
+	scheduleService model.ScheduleEngineService
 }
 
-func (a *ServerScheduler) Run() error {
-	slog.Info(fmt.Sprintf("Server starting on %s", a.Server.Addr))
-	return a.Server.ListenAndServe()
+func (a *ServerScheduler) Run(ctx context.Context) error {
+	slog.Info(fmt.Sprintf("Server starting on %s", a.server.Addr))
+
+	// Start the engine
+	if a.scheduleService != nil {
+		if err := a.scheduleService.Start(ctx); err != nil {
+			slog.Error("Failed to start schedule engine", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+	}
+	return a.server.ListenAndServe()
 }
 
-func (a *ServerScheduler) Close() {
+func (a *ServerScheduler) Close(ctx context.Context) {
 	slog.Info("Executing graceful shutdown...")
 
-	// Create a new context specifically for the HTTP shutdown timeout
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// 1. Stop receiving new HTTP requests & drain connections
+	if err := a.server.Shutdown(ctx); err != nil {
+		slog.Error("HTTP server shutdown error", slog.String("error", err.Error()))
+	}
 
-	// Shut down HTTP Server
-	if a.Server != nil {
-		if err := a.Server.Shutdown(shutdownCtx); err != nil {
-			slog.Error("HTTP server shutdown error", slog.String("error", err.Error()))
+	// 2. Shut down scheduler tasks
+	if a.scheduleService != nil {
+		if err := a.scheduleService.Shutdown(ctx); err != nil {
+			slog.Error("Schedule engine shutdown error", slog.String("error", err.Error()))
 		}
 	}
 
-	// Shut down the in-memory GoCron engine
-	if a.ScheduleService != nil {
-		a.ScheduleService.Stop() // Assumes you have a Stop() method on your service
+	// 3. Close the DB pool last
+	if a.dB != nil {
+		a.dB.Close()
 	}
 
-	// Shut down PostgreSQL connection pool
-	if a.DB != nil {
-		a.DB.Close()
-	}
-
-	slog.Info(fmt.Sprintf("Server successfully stopped on %s", a.Server.Addr))
+	slog.Info("Server successfully stopped", slog.String("addr", a.server.Addr))
 }
 
 func InitializeScheduleEngine(ctx context.Context) (App, error) {
@@ -91,12 +95,6 @@ func InitializeScheduleEngine(ctx context.Context) (App, error) {
 		os.Exit(1)
 	}
 
-	// Start the engine
-	if err := scheduleService.Start(ctx); err != nil {
-		slog.Error("Failed to start schedule engine", slog.String("error", err.Error()))
-		os.Exit(1)
-	}
-
 	handlers := router.RouterHandlers{
 		ScheduleEngine: handler.NewScheduleEngineHandler(scheduleService),
 	}
@@ -116,8 +114,8 @@ func InitializeScheduleEngine(ctx context.Context) (App, error) {
 	}
 
 	return &ServerScheduler{
-		DB:              db,
-		Server:          server,
-		ScheduleService: scheduleService,
+		dB:              db,
+		server:          server,
+		scheduleService: scheduleService,
 	}, nil
 }

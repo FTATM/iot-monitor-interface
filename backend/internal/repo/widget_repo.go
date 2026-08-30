@@ -51,10 +51,11 @@ func (r *widgetRepo) Create(ctx context.Context, widgets []model.Widget) error {
 			device_id_s,
 			widget_label,
     		layout_data,
-			widget_color,
-			custom_chart_data
+			widget_style,
+			custom_chart_data,
+			device_group_id
         ) 
-        VALUES ($1, $2, $3, $4, $5, $6, $7) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7,$8) 
         RETURNING widget_id`
 
 	// 1. Queue all the queries
@@ -66,8 +67,9 @@ func (r *widgetRepo) Create(ctx context.Context, widgets []model.Widget) error {
 			widget.DeviceIds,
 			widget.WidgetLabel,
 			widget.LayoutData,
-			widget.WidgetColor,
+			widget.WidgetStyle,
 			widget.CustomChartData,
+			widget.DeviceGroupId,
 		)
 	}
 
@@ -101,8 +103,9 @@ func (r *widgetRepo) Update(ctx context.Context, widgets []model.Widget) error {
             device_id_s = $3,
             widget_label = $4,
             layout_data = $5,
-            widget_color = $6,
-            custom_chart_data = $7
+            widget_style = $6,
+            custom_chart_data = $7,
+			device_group_id = $9
         WHERE widget_id = $8`
 
 	// 1. Queue all the individual update statements
@@ -113,9 +116,10 @@ func (r *widgetRepo) Update(ctx context.Context, widgets []model.Widget) error {
 			w.DeviceIds,
 			w.WidgetLabel,
 			w.LayoutData,
-			w.WidgetColor,
+			w.WidgetStyle,
 			w.CustomChartData,
 			w.WidgetId,
+			w.DeviceGroupId,
 		)
 	}
 
@@ -147,7 +151,7 @@ func (r *widgetRepo) Delete(ctx context.Context, ids []int) error {
 		return nil
 	}
 
-	query := `DELETE FROM widget WHERE widget_id = ANY($1::int[])`
+	query := `DELETE FROM widget WHERE widget_id = ANY($1::INT[])`
 
 	result, err := r.db(ctx).Exec(ctx, query, ids)
 	if err != nil {
@@ -171,8 +175,9 @@ func (r *widgetRepo) GetWidgetByCanvasId(ctx context.Context, canvasId []int) ([
 		canvas_id,
 		device_id_s,
 		layout_data,
-		widget_color,
-		custom_chart_data
+		widget_style,
+		custom_chart_data,
+		device_group_id
 	FROM widget 
 	WHERE canvas_id = ANY($1)
 	`

@@ -25,7 +25,7 @@ func SetupDeviceGateway(handlers RouterHandlers) *http.ServeMux {
 	Command := http.HandlerFunc(handlers.DeviceGateway.Command)
 
 	// 3. Wrap your handlers
-	gatewayMux.Handle("POST /internal/devicestatus", secureMiddleware(DeviceStatus))
+	gatewayMux.Handle("GET /internal/devicestatus", secureMiddleware(DeviceStatus))
 	gatewayMux.Handle("POST /internal/command", secureMiddleware(Command))
 
 	return mux

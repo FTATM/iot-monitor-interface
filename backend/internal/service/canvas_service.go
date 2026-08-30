@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/FTATM/iot-monitor-interface/internal/model"
+	"github.com/jackc/pgx/v5"
 )
 
 type canvasService struct {
@@ -45,8 +47,10 @@ func (s *canvasService) GetCanvasDetailById(ctx context.Context, canvasId int) (
 	}
 
 	return &model.CanvasDetail{
-		CanvasId: canvas.CanvasId,
-		Widgets:  widgets,
+		CanvasId:    canvas.CanvasId,
+		CanvasName:  canvas.CanvasName,
+		CanvasStyle: canvas.CanvasStyle,
+		Widgets:     widgets,
 	}, nil
 }
 
@@ -77,9 +81,10 @@ func (s *canvasService) GetAllCanvasDetailByUserRole(ctx context.Context, authUs
 
 	for _, canvas := range userCanvas {
 		detail := model.CanvasDetail{
-			CanvasId:   canvas.CanvasId,
-			CanvasName: canvas.CanvasName,
-			Widgets:    widgetMap[canvas.CanvasId],
+			CanvasId:    canvas.CanvasId,
+			CanvasName:  canvas.CanvasName,
+			CanvasStyle: canvas.CanvasStyle,
+			Widgets:     widgetMap[canvas.CanvasId],
 		}
 		result = append(result, detail)
 	}
@@ -352,4 +357,102 @@ func (s *canvasService) DeleteCanvas(ctx context.Context, canvasId int, authUser
 	}
 
 	return nil
+}
+
+func (s *canvasService) ExecuteDynamicQuery(ctx context.Context, rawQuery string, authUserId int) ([]map[string]any, error) {
+	const fname = "ExecuteDynamicQuery"
+
+	cleanQuery := strings.TrimSpace(rawQuery)
+	upperQuery := strings.ToUpper(strings.TrimSpace(cleanQuery))
+
+	if !strings.HasPrefix(upperQuery, "SELECT") && !strings.HasPrefix(upperQuery, "WITH") {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, model.ErrSecurityViolation)
+	}
+
+	forbiddenKeywords := []string{
+		"PG_",                // Blocks all pg_catalog tables (pg_user, pg_class, etc.)
+		"INFORMATION_SCHEMA", // Blocks schema exploration
+		"CURRENT_USER",       // Blocks session details
+		"SESSION_USER",
+		"CURRENT_DATABASE",
+		"VERSION(",
+		"_TIMESCALEDB",
+		"TIMESCALEDB_INFORMATION",
+	}
+
+	for _, keyword := range forbiddenKeywords {
+		if strings.Contains(upperQuery, keyword) {
+			return nil, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, model.ErrSecurityViolation)
+		}
+	}
+
+	cleanQuery = strings.TrimRight(cleanQuery, "; \t\n")
+	safeQuery := fmt.Sprintf("SELECT * FROM (%s) AS user_query LIMIT 500", cleanQuery)
+	readTx, err := s.txManager.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, err
+	}
+	results, err := s.canvasRepo.ExecuteDynamicQuery(readTx.Context(), safeQuery)
+	readTx.Rollback(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	// ⚡ --- NEW: HARDCODED COLUMN FILTER --- ⚡
+	restrictedColumns := []string{
+		"password",
+		"password_hash",
+		"token",
+		"refresh_token",
+		"api_key",
+		"secret",
+	}
+
+	for _, row := range results {
+		for _, col := range restrictedColumns {
+			delete(row, col)
+		}
+
+		for key, val := range row {
+			// pgx/v5 returns dynamic UUIDs as [16]byte
+			if b, ok := val.([16]byte); ok {
+				// Convert the raw bytes into the standard 8-4-4-4-12 UUID string format
+				row[key] = fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+			}
+
+			// Optional: If you have text/varchar columns coming back as raw []byte,
+			// this ensures they render as strings instead of Base64 gibberish
+			if b, ok := val.([]byte); ok {
+				row[key] = string(b)
+			}
+		}
+	}
+
+	writeTx, err := s.txManager.Begin(ctx)
+	if err == nil {
+		defer writeTx.Rollback(ctx)
+
+		// Store the exact string they typed into the JSON log
+		queryPayload := map[string]string{"raw_query": rawQuery}
+		newData, err := model.StructToDynamicJSON(queryPayload)
+		if err != nil {
+			return nil, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+		}
+
+		audit := model.AuditLog{
+			EntityType: "dynamic_query",
+			EntityId:   "0",
+			Action:     model.QueryAction,
+			ChangedBy:  authUserId,
+			OldData:    nil,
+			NewData:    newData,
+		}
+
+		if err := s.auditLogRepo.Create(writeTx.Context(), []model.AuditLog{audit}); err != nil {
+			return nil, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+		} else {
+			_ = writeTx.Commit(ctx)
+		}
+	}
+	return results, nil
 }

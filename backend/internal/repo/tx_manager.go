@@ -40,3 +40,18 @@ func (tm *txManager) Begin(ctx context.Context) (model.Transaction, error) {
 		ctx: txCtx,
 	}, nil
 }
+
+// ⚡ NEW: BeginTx starts a transaction with specific options (like Read-Only)
+func (tm *txManager) BeginTx(ctx context.Context, opts pgx.TxOptions) (model.Transaction, error) {
+	tx, err := tm.pool.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	txCtx := injectTx(ctx, tx)
+
+	return &txWrapper{
+		tx:  tx,
+		ctx: txCtx,
+	}, nil
+}

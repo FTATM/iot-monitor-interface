@@ -86,8 +86,13 @@ func (s *scheduleEngineService) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *scheduleEngineService) Stop() {
-	s.engine.Shutdown()
+func (s *scheduleEngineService) Shutdown(ctx context.Context) error {
+	const fname = "Stop"
+	err := s.engine.ShutdownWithContext(ctx)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+	return nil
 }
 
 // Add a job to the memory engine
@@ -125,7 +130,7 @@ func (s *scheduleEngineService) CancelJob(schedId string) bool {
 
 // The actual task that fires
 func (s *scheduleEngineService) executeDeviceTask(ctx context.Context, jobID uuid.UUID, sched model.Schedule) {
-	slog.Info("Sending action to device ", slog.String("scheduleId", sched.ScheduleId), slog.String("action", sched.Action), slog.Int("deviceId", sched.DeviceId))
+	slog.Info("Sending action to device ", slog.String("scheduleId", sched.ScheduleId))
 
 	isFinished := (sched.ScheduleType == "one_time") || (sched.EndTime != nil && time.Now().After(*sched.EndTime))
 
@@ -134,7 +139,7 @@ func (s *scheduleEngineService) executeDeviceTask(ctx context.Context, jobID uui
 		s.jobRegistry.Delete(sched.ScheduleId)
 		s.scheduleEngineRepo.UpdateStatus(ctx, sched.ScheduleId, "completed")
 		s.scheduleEngineRepo.UpdateLastRun(ctx, sched.ScheduleId)
-		slog.Info("Job completed.", slog.String("scheduleId", sched.ScheduleId), slog.String("action", sched.Action), slog.Int("deviceId", sched.DeviceId))
+		slog.Info("Job completed.", slog.String("scheduleId", sched.ScheduleId))
 	} else {
 		s.scheduleEngineRepo.UpdateLastRun(ctx, sched.ScheduleId)
 	}

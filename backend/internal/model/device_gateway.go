@@ -2,48 +2,51 @@ package model
 
 import (
 	"context"
-	"net"
 	"time"
 )
 
-type DeviceDataRequest struct {
+type DeviceDataPayloadReq struct {
+	DeviceName int `json:"deviceName,omitempty"`
+	ValueData  int `json:"valueData"`
+}
+
+type DeviceData struct {
 	DeviceId   int       `json:"deviceId" db:"device_id"`
-	DeviceName string    `json:"deviceName,omitempty" db:"device_name"`
 	ValueData  int       `json:"valueData" db:"value_data"`
-	Source     string    `json:"source" db:"source"`
-	ReceivedAt time.Time `json:"-"` // use in system
+	ReceivedAt time.Time `json:"-"`
 }
 
-type CommandRequest struct {
-	DeviceId int    `json:"deviceId"`
-	Command  string `json:"command"`
-	Protocol string `json:"protocol"`
+type GatewayCommand struct {
+	DeviceId int             `json:"deviceId"`
+	GroupId  int             `json:"groupId"`
+	Payload  []DeviceCommand `json:"payload"`
+	Protocol string          `json:"protocol"`
 }
 
-// SessionManagerService defines the contract for managing active connections & command routing
-type SessionManagerService interface {
-	SetMQTTClient(client any)
-	SetUDPServer(conn *net.UDPConn)
-	RegisterTCP(deviceId int, conn net.Conn)
-	UnregisterTCP(deviceId int, conn net.Conn)
-	RegisterUDP(deviceId int, addr *net.UDPAddr)
-	RouteCommand(ctx context.Context, req *CommandRequest) error
-	PopHTTPCommand(deviceId int) (string, bool)
-	MarkDeviceActive(deviceId int)
-	IsDeviceOnline(deviceId int) bool
+type DeviceCommand struct {
+	DeviceName string `json:"deviceName"`
+	Cmd        string `json:"cmd"`
 }
 
 type DeviceGatewayRepository interface {
-	BulkUpsertDeviceData(ctx context.Context, data []DeviceDataRequest) error
+	BulkUpsertDeviceData(ctx context.Context, data []DeviceData) error
+	UpdateLastSeen(ctx context.Context, deviceId int) error
+	GetDeviceIdByName(ctx context.Context, deviceName string) (int, error)
+	GetDeviceIdByGroupName(ctx context.Context, deviceName string) ([]DeviceGroupData, error)
+	GetDeviceNameById(ctx context.Context, deviceId int) (string, error)
+	GetDeviceGroupNameById(ctx context.Context, groupId int) (string, error)
 }
 
 type DeviceGatewayService interface {
-	Add(data DeviceDataRequest)
+	Add(data DeviceData)
 	Start(ctx context.Context) error
 	Stop()
+	UpdateDeviceLastSeen(ctx context.Context, deviceId int) error
+	GetDeviceIdByName(ctx context.Context, deviceName string) (int, error)
+	GetDeviceIdByGroupName(ctx context.Context, groupName string) ([]DeviceGroupData, error)
 }
 
 type DeviceGatewayClient interface {
 	GetDeviceStatus(ctx context.Context, deviceId int) (bool, error)
-	ExecuteManualCommand(ctx context.Context, req *CommandRequest) error
+	ExecuteCommand(ctx context.Context, req GatewayCommand) error
 }

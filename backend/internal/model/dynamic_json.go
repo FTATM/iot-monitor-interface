@@ -1,9 +1,11 @@
 package model
 
 import (
+	"bytes"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"reflect"
 )
 
 // DynamicJSON is a reusable type that holds raw JSON bytes
@@ -72,4 +74,17 @@ func StructToDynamicJSON(data any) (DynamicJSON, error) {
 
 	// Cast the bytes to your DynamicJSON type
 	return DynamicJSON(bytes), nil
+}
+
+func (j *DynamicJSON) AreJSONsEqual(b DynamicJSON) bool {
+	if bytes.Equal(*j, b) {
+		return true
+	}
+
+	// 2. Slow path: parse & compare semantically
+	var objA, objB any
+	if json.Unmarshal(*j, &objA) != nil || json.Unmarshal(b, &objB) != nil {
+		return false
+	}
+	return reflect.DeepEqual(objA, objB)
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -24,7 +25,7 @@ func NewDeviceGatewayHandler(gatewayService model.DeviceGatewayService, sessionS
 // HTTPTelemetry receives JSON telemetry over HTTP POST
 func (h *DeviceGatewayHandler) HTTPTelemetry(w http.ResponseWriter, r *http.Request) {
 	var res Response
-	var data model.DeviceDataRequest
+	var data model.DeviceData
 
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		res.Message = "Invalid request body"
@@ -47,7 +48,7 @@ func (h *DeviceGatewayHandler) HTTPTelemetry(w http.ResponseWriter, r *http.Requ
 
 func (h *DeviceGatewayHandler) Command(w http.ResponseWriter, r *http.Request) {
 	var res Response
-	var req model.CommandRequest
+	var req model.GatewayCommand
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		res.Message = "Invalid request body"
@@ -55,19 +56,28 @@ func (h *DeviceGatewayHandler) Command(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.DeviceId <= 0 || req.Command == "" || req.Protocol == "" {
-		res.Message = "Missing required fields (deviceId, command, protocol)"
+	hasDevice := req.DeviceId > 0
+	hasGroup := req.GroupId > 0
+
+	// ⚡ FIX: Changed len(req.Payload) != 0 to == 0
+	// It ensures you provide either a DeviceId OR a GroupId (not both),
+	// ensures the payload has items, and ensures a protocol exists.
+	if (hasDevice == hasGroup) || len(req.Payload) == 0 || req.Protocol == "" {
+		res.Message = "Missing required fields (Requires DeviceId XOR GroupId, valid Payload, and Protocol)"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
 
+	detachedCtx := context.WithoutCancel(r.Context())
+
 	// Delegate the actual routing to the SessionManager Service
-	err := h.sessionService.RouteCommand(r.Context(), &req)
+	err := h.sessionService.RouteCommand(detachedCtx, &req)
 	if err != nil {
 		res.Message = "Error routing command"
 		slog.ErrorContext(r.Context(), res.Message,
 			slog.String("track", err.Error()),
 			slog.Int("deviceId", req.DeviceId),
+			slog.Int("groupId", req.GroupId),
 			slog.String("protocol", req.Protocol),
 		)
 		respondJson(w, http.StatusInternalServerError, &res)
@@ -76,7 +86,6 @@ func (h *DeviceGatewayHandler) Command(w http.ResponseWriter, r *http.Request) {
 
 	res.Message = "Command routed successfully"
 	respondJson(w, http.StatusOK, &res)
-
 }
 
 // HTTPCommandPolling allows HTTP physical devices to fetch queued commands via GET
@@ -93,13 +102,13 @@ func (h *DeviceGatewayHandler) HTTPCommandPolling(w http.ResponseWriter, r *http
 
 	h.sessionService.MarkDeviceActive(deviceId)
 
-	command, exists := h.sessionService.PopHTTPCommand(deviceId)
+	payload, exists := h.sessionService.PopHTTPCommand(deviceId)
 	if !exists {
 		respondJson(w, http.StatusNoContent, nil)
 		return
 	}
 
-	res.Data = map[string]string{"command": command}
+	res.Data = payload
 	respondJson(w, http.StatusOK, &res)
 }
 
@@ -116,6 +125,13 @@ func (h *DeviceGatewayHandler) DeviceStatus(w http.ResponseWriter, r *http.Reque
 
 	// Ask the Session Manager!
 	isOnline := h.sessionService.IsDeviceOnline(deviceId)
+	if isOnline {
+		if err = h.service.UpdateDeviceLastSeen(r.Context(), deviceId); err != nil {
+			slog.Error("Error",
+				slog.String("track", err.Error()),
+			)
+		}
+	}
 
 	res.Message = "Success"
 	res.Data = map[string]any{
