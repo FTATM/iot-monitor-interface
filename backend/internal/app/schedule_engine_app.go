@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/FTATM/iot-monitor-interface/config"
+	"github.com/FTATM/iot-monitor-interface/internal/client"
 	"github.com/FTATM/iot-monitor-interface/internal/handler"
 	"github.com/FTATM/iot-monitor-interface/internal/middleware"
 	"github.com/FTATM/iot-monitor-interface/internal/model"
@@ -86,10 +87,16 @@ func InitializeScheduleEngine(ctx context.Context) (App, error) {
 
 	slog.Info("Database connected!")
 
+	gatewayBaseURL := os.Getenv("DEVICE_GATEWAY_URL")
+	internalSecret := os.Getenv("INTERNAL_API_SECRET")
+
 	// Dependency Injection
 	scheduleRepo := repo.NewScheduleEngineRepository(db)
+	deviceRepo := repo.NewDeviceRepository(db)
 
-	scheduleService, err := service.NewSchedulerEngineService(scheduleRepo)
+	gatewayClient := client.NewDeviceGatewayClient(gatewayBaseURL, internalSecret)
+
+	scheduleService, err := service.NewSchedulerEngineService(scheduleRepo, deviceRepo, gatewayClient)
 	if err != nil {
 		slog.Error("Failed to initialize service", slog.String("error", err.Error()))
 		os.Exit(1)
@@ -99,7 +106,7 @@ func InitializeScheduleEngine(ctx context.Context) (App, error) {
 		ScheduleEngine: handler.NewScheduleEngineHandler(scheduleService),
 	}
 
-	mux := router.SetupApi(handlers)
+	mux := router.SetupSchedule(handlers)
 	wrappedMux := middleware.LoggingApi(mux)
 
 	serverPort := os.Getenv("SERVER_SCHEDULE_ENGINE_PORT")

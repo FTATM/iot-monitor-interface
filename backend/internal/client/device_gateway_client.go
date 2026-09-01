@@ -100,3 +100,49 @@ func (c *deviceGatewayClient) ExecuteCommand(ctx context.Context, req model.Gate
 
 	return nil
 }
+
+func (c *deviceGatewayClient) InvalidateDeviceCache(ctx context.Context, oldDeviceName string) error {
+	const fname = "InvalidateDeviceCache"
+	url := fmt.Sprintf("%s/devicegateway/internal/clearcache?type=device&name=%s", c.baseURL, oldDeviceName)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", c.prefixError, fname, err)
+	}
+
+	req.Header.Set("X-Internal-Secret", c.internalSecret)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", c.prefixError, fname, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("[%s]>[%s]: gateway returned unexpected status: %d", c.prefixError, fname, resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *deviceGatewayClient) InvalidateGroupCache(ctx context.Context, oldGroupName string) error {
+	const fname = "InvalidateGroupCache"
+	url := fmt.Sprintf("%s/devicegateway/internal/clearcache?type=group&name=%s", c.baseURL, oldGroupName)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", c.prefixError, fname, err)
+	}
+
+	req.Header.Set("X-Internal-Secret", c.internalSecret)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", c.prefixError, fname, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("[%s]>[%s]: gateway returned unexpected status: %d", c.prefixError, fname, resp.StatusCode)
+	}
+	return nil
+}

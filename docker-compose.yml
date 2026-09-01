@@ -81,6 +81,8 @@ services:
     depends_on:
       - server-api
     restart: unless-stopped
+    environment:
+      - TZ=Asia/Bangkok
     logging:
       driver: "json-file"
       options:
@@ -106,6 +108,8 @@ services:
     image: nodered/node-red:latest
     ports:
       - "1880:1880"
+    environment:
+      - TZ=Asia/Bangkok
     volumes:
       # Persist all flows, nodes, and credentials
       - nodered_data:/data

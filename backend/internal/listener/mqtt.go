@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-func StartMQTTClient(ctx context.Context, brokerURL string, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService) {
+func StartMQTTClient(ctx context.Context, brokerURL string, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService, cacheSvc model.CacheService) {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(brokerURL)
 	opts.SetClientID("device-gateway-worker")
@@ -24,7 +25,8 @@ func StartMQTTClient(ctx context.Context, brokerURL string, svc model.DeviceGate
 
 		// Subscribe to Single Device Topic
 		singleTopic := "device/+/data"
-		sHandler := singleHandler(ctx, svc, sessionSvc)
+		// ⚡ ส่ง cacheSvc เข้าไปใน Handler
+		sHandler := singleHandler(ctx, svc, sessionSvc, cacheSvc)
 		if token := c.Subscribe(singleTopic, 1, sHandler); token.Wait() && token.Error() != nil {
 			slog.ErrorContext(ctx, "Failed to subscribe to MQTT topic", slog.String("error", token.Error().Error()))
 		} else {
@@ -33,7 +35,8 @@ func StartMQTTClient(ctx context.Context, brokerURL string, svc model.DeviceGate
 
 		// Subscribe to Group Device Topic
 		groupTopic := "device-group/+/data"
-		gHandler := groupHandler(ctx, svc, sessionSvc)
+		// ⚡ ส่ง cacheSvc เข้าไปใน Handler
+		gHandler := groupHandler(ctx, svc, sessionSvc, cacheSvc)
 		if token := c.Subscribe(groupTopic, 1, gHandler); token.Wait() && token.Error() != nil {
 			slog.ErrorContext(ctx, "Failed to subscribe to group topic", slog.String("error", token.Error().Error()))
 		} else {
@@ -55,7 +58,7 @@ func StartMQTTClient(ctx context.Context, brokerURL string, svc model.DeviceGate
 }
 
 // --- HANDLERS ---
-func singleHandler(ctx context.Context, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService) mqtt.MessageHandler {
+func singleHandler(ctx context.Context, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService, cacheSvc model.CacheService) mqtt.MessageHandler {
 	return func(client mqtt.Client, msg mqtt.Message) {
 		topicParts := strings.Split(msg.Topic(), "/")
 		if len(topicParts) != 3 {
@@ -63,18 +66,11 @@ func singleHandler(ctx context.Context, svc model.DeviceGatewayService, sessionS
 		}
 		deviceName := topicParts[1]
 
-		// 1. Resolve Name to ID using TTL Cache
-		var deviceId int
-		if cachedData, ok := getFromCache(&deviceNameCache, deviceName); ok {
-			deviceId = cachedData.(int)
-		} else {
-			dbId, err := svc.GetDeviceIdByName(ctx, deviceName)
-			if err != nil || dbId <= 0 {
-				slog.Warn("Unknown device name received", slog.String("name", deviceName))
-				return
-			}
-			setToCache(&deviceNameCache, deviceName, dbId, cacheTTL)
-			deviceId = dbId
+		// 1. Resolve Name to ID using Central Cache Service
+		deviceId, err := cacheSvc.GetDeviceIdByName(ctx, deviceName)
+		if err != nil || deviceId <= 0 {
+			slog.Warn("Unknown device name received", slog.String("name", deviceName))
+			return
 		}
 
 		payload := bytes.TrimSpace(msg.Payload())
@@ -86,11 +82,13 @@ func singleHandler(ctx context.Context, svc model.DeviceGatewayService, sessionS
 		switch payload[0] {
 		case '[':
 			if err := json.Unmarshal(payload, &incomingData); err != nil {
+				slog.ErrorContext(ctx, "Error", slog.String("track", err.Error()))
 				return
 			}
 		case '{':
 			var single model.DeviceDataPayloadReq
 			if err := json.Unmarshal(payload, &single); err != nil {
+				slog.ErrorContext(ctx, "Error", slog.String("track", err.Error()))
 				return
 			}
 			incomingData = append(incomingData, single)
@@ -98,11 +96,11 @@ func singleHandler(ctx context.Context, svc model.DeviceGatewayService, sessionS
 			return
 		}
 
-		// Process incoming array
+		// Process payload for this specific device
 		for _, d := range incomingData {
 			deviceData := model.DeviceData{
 				DeviceId:  deviceId,
-				ValueData: d.ValueData,
+				ValueData: int(math.Round(d.ValueData * model.DeviceScale)),
 			}
 			sessionSvc.MarkDeviceActive(deviceData.DeviceId)
 			svc.Add(deviceData)
@@ -110,7 +108,7 @@ func singleHandler(ctx context.Context, svc model.DeviceGatewayService, sessionS
 	}
 }
 
-func groupHandler(ctx context.Context, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService) mqtt.MessageHandler {
+func groupHandler(ctx context.Context, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService, cacheSvc model.CacheService) mqtt.MessageHandler {
 	return func(client mqtt.Client, msg mqtt.Message) {
 		topicParts := strings.Split(msg.Topic(), "/")
 		if len(topicParts) != 3 {
@@ -118,18 +116,11 @@ func groupHandler(ctx context.Context, svc model.DeviceGatewayService, sessionSv
 		}
 		groupName := topicParts[1]
 
-		// 1. Resolve Group Name to Device Names using TTL Cache
-		var deviceNames []string
-		if cachedData, ok := getFromCache(&deviceGroupNameCache, groupName); ok {
-			deviceNames = cachedData.([]string)
-		} else {
-			groupDataList, err := svc.GetDeviceIdByGroupName(ctx, groupName)
-			if err != nil || len(groupDataList) == 0 {
-				slog.Warn("Unknown or empty group name received", slog.String("groupName", groupName))
-				return
-			}
-			deviceNames = groupDataList[0].DeviceNames
-			setToCache(&deviceGroupNameCache, groupName, deviceNames, cacheTTL)
+		// 1. Resolve Group Name to Device Names using Central Cache Service
+		deviceNames, err := cacheSvc.GetDeviceNamesByGroupName(ctx, groupName)
+		if err != nil || len(deviceNames) == 0 {
+			slog.Warn("Unknown or empty group name received", slog.String("groupName", groupName))
+			return
 		}
 
 		payload := bytes.TrimSpace(msg.Payload())
@@ -141,11 +132,13 @@ func groupHandler(ctx context.Context, svc model.DeviceGatewayService, sessionSv
 		switch payload[0] {
 		case '[':
 			if err := json.Unmarshal(payload, &incomingData); err != nil {
+				slog.ErrorContext(ctx, "Error", slog.String("track", err.Error()))
 				return
 			}
 		case '{':
 			var single model.DeviceDataPayloadReq
 			if err := json.Unmarshal(payload, &single); err != nil {
+				slog.ErrorContext(ctx, "Error", slog.String("track", err.Error()))
 				return
 			}
 			incomingData = append(incomingData, single)
@@ -153,32 +146,37 @@ func groupHandler(ctx context.Context, svc model.DeviceGatewayService, sessionSv
 			return
 		}
 
-		// 2. FAN-OUT: Loop through EVERY device in the group
-		for _, dName := range deviceNames {
+		// 2. Validate and process ONLY the specific devices sent in the payload
+		validDevices := make(map[string]bool)
+		for _, name := range deviceNames {
+			validDevices[name] = true
+		}
 
-			// Resolve Device ID using TTL Cache
-			var deviceId int
-			if cachedData, ok := getFromCache(&deviceNameCache, dName); ok {
-				deviceId = cachedData.(int)
-			} else {
-				dbId, err := svc.GetDeviceIdByName(ctx, dName)
-				if err != nil || dbId <= 0 {
-					slog.Warn("Unknown device in group", slog.String("device", dName), slog.String("group", groupName))
-					continue
-				}
-				setToCache(&deviceNameCache, dName, dbId, cacheTTL)
-				deviceId = dbId
+		// Loop through the incoming JSON payload array
+		for _, d := range incomingData {
+			dName := d.DeviceName
+
+			if dName == "" || !validDevices[dName] {
+				slog.Warn("Device in payload is missing or does not belong to group",
+					slog.String("device", dName),
+					slog.String("group", groupName),
+				)
+				continue
 			}
 
-			// Process payload for this specific device
-			for _, d := range incomingData {
-				deviceData := model.DeviceData{
-					DeviceId:  deviceId,
-					ValueData: d.ValueData,
-				}
-				sessionSvc.MarkDeviceActive(deviceData.DeviceId)
-				svc.Add(deviceData)
+			// Resolve Device ID using Central Cache Service
+			deviceId, err := cacheSvc.GetDeviceIdByName(ctx, dName)
+			if err != nil || deviceId <= 0 {
+				slog.Warn("Unknown device in group", slog.String("device", dName))
+				continue
 			}
+
+			deviceData := model.DeviceData{
+				DeviceId:  deviceId,
+				ValueData: int(math.Round(d.ValueData * model.DeviceScale)),
+			}
+			sessionSvc.MarkDeviceActive(deviceData.DeviceId)
+			svc.Add(deviceData)
 		}
 	}
 }

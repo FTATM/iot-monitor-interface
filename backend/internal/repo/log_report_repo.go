@@ -15,7 +15,7 @@ type logReportRepo struct {
 }
 
 func NewLogReportRepository(pool *pgxpool.Pool) model.LogReportRepository {
-	return &logReportRepo{pool: pool, prefixError: "logRepo"}
+	return &logReportRepo{pool: pool, prefixError: "logReportRepo"}
 }
 
 func (r *logReportRepo) db(ctx context.Context) DBTX {
@@ -55,21 +55,24 @@ func (r *logReportRepo) GetDeviceLogsForExport(ctx context.Context, filter model
 
 	query := `
 		SELECT 
-			l.id, l.device_id, l.value_data, l.source, l.received_at,
+			l.device_id, 
+			(l.value_data / $4::numeric) AS value_data,
+			l.received_at,
 			COALESCE(d.device_name, 'Unknown Device') AS device_name
 		FROM device_data_log l
 		LEFT JOIN device d ON l.device_id = d.device_id
 		WHERE l.received_at >= $1 AND l.received_at <= $2
 		  AND (
 			$3 = '' OR 
-			l.source ILIKE '%' || $3 || '%' OR 
 			l.device_id::text ILIKE '%' || $3 || '%' OR
-			d.device_name ILIKE '%' || $3 || '%'
+			d.device_name ILIKE '%' || $3 || '%' OR
+			(l.value_data / $4::numeric)::text ILIKE '%' || $3 || '%'
 		  )
 		ORDER BY l.received_at DESC
 	`
 
-	rows, err := r.db(ctx).Query(ctx, query, filter.From, filter.To, filter.Keyword)
+	// ⚡ FIX: Pass the constant as the 4th parameter
+	rows, err := r.db(ctx).Query(ctx, query, filter.From, filter.To, filter.Keyword, float64(model.DeviceScale))
 	if err != nil {
 		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
@@ -136,23 +139,24 @@ func (r *logReportRepo) SearchDeviceLogs(ctx context.Context, filter model.LogFi
 
 	query := `
 		SELECT 
-			l.id, l.device_id, l.value_data, l.source, l.received_at,
+			l.device_id,
+			(l.value_data / $6::numeric) AS value_data,
+			l.received_at,
 			COALESCE(d.device_name, 'Unknown Device') AS device_name
 		FROM device_data_log l
 		LEFT JOIN device d ON l.device_id = d.device_id
 		WHERE l.received_at >= $1 AND l.received_at <= $2
 		  AND (
 			$3 = '' OR 
-			l.source ILIKE '%' || $3 || '%' OR 
 			l.device_id::text ILIKE '%' || $3 || '%' OR
 			d.device_name ILIKE '%' || $3 || '%' OR
-			l.value_data::text ILIKE '%' || $3 || '%'
+			(l.value_data / $6::numeric)::text ILIKE '%' || $3 || '%'
 		  )
 		ORDER BY l.received_at DESC
 		LIMIT $4 OFFSET $5
 	`
 
-	rows, err := r.db(ctx).Query(ctx, query, filter.From, filter.To, filter.Keyword, filter.Limit, filter.Offset)
+	rows, err := r.db(ctx).Query(ctx, query, filter.From, filter.To, filter.Keyword, filter.Limit, filter.Offset, float64(model.DeviceScale))
 	if err != nil {
 		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
@@ -211,13 +215,14 @@ func (r *logReportRepo) CountDeviceLogs(ctx context.Context, filter model.LogFil
 		WHERE l.received_at >= $1 AND l.received_at <= $2
 		  AND (
 			$3 = '' OR 
-			l.source ILIKE '%' || $3 || '%' OR 
 			l.device_id::text ILIKE '%' || $3 || '%' OR
-			d.device_name ILIKE '%' || $3 || '%'
+			d.device_name ILIKE '%' || $3 || '%' OR
+			(l.value_data / $4::numeric)::text ILIKE '%' || $3 || '%'
 		  )
 	`
 	var count int
-	err := r.db(ctx).QueryRow(ctx, query, filter.From, filter.To, filter.Keyword).Scan(&count)
+	// ⚡ FIX: Pass the constant as the 4th parameter
+	err := r.db(ctx).QueryRow(ctx, query, filter.From, filter.To, filter.Keyword, float64(model.DeviceScale)).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}

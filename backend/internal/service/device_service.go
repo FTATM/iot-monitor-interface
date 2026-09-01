@@ -117,9 +117,10 @@ func (s *deviceService) UpdateDevice(ctx context.Context, updateDevice *model.De
 	var err error
 
 	device := model.Device{
-		DeviceId: updateDevice.DeviceId,
-		Active:   updateDevice.Active,
-		Protocol: updateDevice.Protocol,
+		DeviceName: updateDevice.DeviceName,
+		DeviceId:   updateDevice.DeviceId,
+		Active:     updateDevice.Active,
+		Protocol:   updateDevice.Protocol,
 	}
 
 	oldDevice, err := s.deviceRepo.GetById(ctx, device.DeviceId)
@@ -131,6 +132,8 @@ func (s *deviceService) UpdateDevice(ctx context.Context, updateDevice *model.De
 	if oldDevice.IsSame(device) {
 		return nil
 	}
+
+	updateDevice.OldName = oldDevice.DeviceName
 
 	tx, err := s.txManager.Begin(ctx)
 	if err != nil {
@@ -311,6 +314,11 @@ func (s *deviceService) StartPublic(ctx context.Context) {
 						slog.String("error", err.Error()))
 					continue
 				}
+
+				// ⚡ REVERSE SCALING: Divide by 100.0 to convert the DB integer (e.g., 2456)
+				// back into the real decimal (24.56) for the Vue frontend.
+				chartDeviceData.ValueData = chartDeviceData.ValueData / float64(model.DeviceScale)
+
 				masterDataMap[deviceId] = chartDeviceData
 			}
 
@@ -402,7 +410,7 @@ func (s *deviceService) GetChartHistory(ctx context.Context, deviceIds []int, ma
 
 	for _, log := range logs {
 		tsMillis := float64(log.ReceivedAt.UnixMilli())
-		valData := float64(log.ValueData)
+		valData := float64(log.ValueData) / float64(model.DeviceScale)
 
 		historyData[log.DeviceId] = append(historyData[log.DeviceId], [2]float64{tsMillis, valData})
 	}
@@ -498,7 +506,7 @@ func (s *deviceService) CreateDeviceGroup(ctx context.Context, createDeviceG mod
 	return nil
 }
 
-func (s *deviceService) UpdateDeviceGroup(ctx context.Context, updateDeviceG model.UpdateDeviceGroup, authUserId int) error {
+func (s *deviceService) UpdateDeviceGroup(ctx context.Context, updateDeviceG *model.UpdateDeviceGroup, authUserId int) error {
 	const fname = "UpdateDeviceGroup"
 	var err error
 
@@ -553,6 +561,8 @@ func (s *deviceService) UpdateDeviceGroup(ctx context.Context, updateDeviceG mod
 	if oldDeviceGroup.IsSame(deviceGroup) && len(toAddMap) == 0 && len(toDeleteMap) == 0 {
 		return nil
 	}
+
+	updateDeviceG.OldName = oldDeviceGroup.GroupName
 
 	tx, err := s.txManager.Begin(ctx)
 	if err != nil {

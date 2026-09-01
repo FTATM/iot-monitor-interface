@@ -24,7 +24,7 @@ func (s *Device) IsSame(req Device) bool {
 	}
 
 	return s.DeviceId == req.DeviceId &&
-		// s.DeviceName == req.DeviceName &&
+		s.DeviceName == req.DeviceName &&
 		s.Active == req.Active &&
 		s.Protocol == req.Protocol
 }
@@ -45,14 +45,16 @@ type DeviceCreate struct {
 }
 
 type DeviceUpdate struct {
-	DeviceId int     `json:"deviceId"`
-	Protocol *string `json:"protocol"`
-	Active   bool    `json:"active"`
+	DeviceId   int     `json:"deviceId"`
+	DeviceName string  `json:"deviceName"`
+	Protocol   *string `json:"protocol"`
+	Active     bool    `json:"active"`
+	OldName    string  `json:"-"`
 }
 
 type ChartDeviceData struct {
-	DeviceName string `json:"deviceName"`
-	ValueData  int    `json:"valueData"`
+	DeviceName string  `json:"deviceName"`
+	ValueData  float64 `json:"valueData"`
 }
 
 type ChartData struct {
@@ -82,7 +84,6 @@ type DeviceRepository interface {
 	Delete(ctx context.Context, deviceId int) error
 	GetProtocolType(ctx context.Context) ([]string, error)
 	GetByIdChartDeviceData(ctx context.Context, id int) (ChartDeviceData, error)
-	GetDeviceDataLogRange(ctx context.Context, deviceIds []int, fromTime, toTime time.Time, maxPoints int) ([]DeviceDataLog, error)
 	GetAggregatedData(ctx context.Context, deviceIds []int, fromTime, toTime time.Time, bucketInterval string) ([]DeviceDataLog, error)
 	GetRawData(ctx context.Context, deviceIds []int, fromTime, toTime time.Time, limit int) ([]DeviceDataLog, error)
 	CountData(ctx context.Context, deviceIds []int, fromTime, toTime time.Time) (int, error)
@@ -111,7 +112,7 @@ type DeviceService interface {
 	GetChartHistory(ctx context.Context, deviceId []int, maxPoints int, from, to time.Time) (map[int][][2]float64, error)
 	GetDeviceGroupDetail(ctx context.Context) ([]DeviceGroupDetail, error)
 	CreateDeviceGroup(ctx context.Context, createDeviceG CreateDeviceGroup, authUserId int) error
-	UpdateDeviceGroup(ctx context.Context, updateDeviceG UpdateDeviceGroup, authUserId int) error
+	UpdateDeviceGroup(ctx context.Context, updateDeviceG *UpdateDeviceGroup, authUserId int) error
 	DeleteDeviceGroup(ctx context.Context, deviceGroupId, authUserId int) error
 	GetDeviceForCommandByIds(ctx context.Context, deviceIds []int) ([]CommandDeviceInfo, error)
 }

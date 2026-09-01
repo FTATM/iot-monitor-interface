@@ -55,4 +55,5 @@ type UpdateDeviceGroup struct {
 	Protocol    *string `json:"protocol"`
 	Description string  `json:"description"`
 	DeviceIds   []int   `json:"deviceIds"`
+	OldName     string  `json:"-"`
 }

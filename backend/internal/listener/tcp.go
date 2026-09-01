@@ -2,15 +2,18 @@ package listener
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
+	"math"
 	"net"
+	"time"
 
 	"github.com/FTATM/iot-monitor-interface/internal/model"
 )
 
-func StartTCPServer(ctx context.Context, port string, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService) {
+func StartTCPServer(ctx context.Context, port string, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService, cacheSvc model.CacheService) {
 	listener, err := net.Listen("tcp", port)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to start TCP listener", slog.String("error", err.Error()))
@@ -36,13 +39,20 @@ func StartTCPServer(ctx context.Context, port string, svc model.DeviceGatewaySer
 		}
 
 		// Handle each device in its own goroutine so they don't block each other
-		go handleTCPConnection(ctx, conn, svc, sessionSvc)
+		go handleTCPConnection(ctx, conn, svc, sessionSvc, cacheSvc)
 	}
 }
 
-func handleTCPConnection(ctx context.Context, conn net.Conn, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService) {
+func handleTCPConnection(ctx context.Context, conn net.Conn, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService, cacheSvc model.CacheService) {
 	remoteAddr := conn.RemoteAddr().String()
 	slog.InfoContext(ctx, "Device connected via TCP", slog.String("ip", remoteAddr))
+
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		// Send a keep-alive probe every 3 minutes.
+		// If the device is physically gone, this connection will fail and close itself.
+		tcpConn.SetKeepAlivePeriod(3 * time.Minute)
+	}
 
 	var connectedDeviceID int
 
@@ -58,25 +68,62 @@ func handleTCPConnection(ctx context.Context, conn net.Conn, svc model.DeviceGat
 	// Read data line-by-line (assuming devices send JSON separated by \n)
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
-		rawLine := scanner.Bytes()
-
-		//! fixed to data payload new
-		var data model.DeviceData
-		if err := json.Unmarshal(rawLine, &data); err != nil {
-			slog.Debug("Invalid JSON received over TCP",
-				slog.String("ip", remoteAddr),
-			)
+		rawLine := bytes.TrimSpace(scanner.Bytes())
+		if len(rawLine) == 0 {
 			continue
 		}
 
-		if data.DeviceId > 0 {
-			connectedDeviceID = data.DeviceId // Save the ID
-			sessionSvc.MarkDeviceActive(data.DeviceId)
-			sessionSvc.RegisterTCP(data.DeviceId, conn)
+		var incomingData []model.DeviceDataPayloadReq
+
+		// 1. Handle both Array and Object JSON payloads
+		switch rawLine[0] {
+		case '[':
+			if err := json.Unmarshal(rawLine, &incomingData); err != nil {
+				slog.Debug("Invalid JSON array received over TCP", slog.String("ip", remoteAddr))
+				continue
+			}
+		case '{':
+			var single model.DeviceDataPayloadReq
+			if err := json.Unmarshal(rawLine, &single); err != nil {
+				slog.Debug("Invalid JSON object received over TCP", slog.String("ip", remoteAddr))
+				continue
+			}
+			incomingData = append(incomingData, single)
+		default:
+			continue
 		}
 
-		// Pass to the Batcher Service!
-		svc.Add(data)
+		// 2. Process the payload and resolve the ID
+		for _, req := range incomingData {
+			if req.DeviceName == "" {
+				continue
+			}
+
+			// Look up the Device ID using our Cache Service
+			deviceId, err := cacheSvc.GetDeviceIdByName(ctx, req.DeviceName)
+			if err != nil || deviceId <= 0 {
+				slog.Warn("Unknown device in TCP payload", slog.String("device", req.DeviceName))
+				continue
+			}
+
+			// 3. Register the TCP connection for the very first valid device ID we see on this socket
+			if connectedDeviceID == 0 {
+				connectedDeviceID = deviceId
+				sessionSvc.RegisterTCP(deviceId, conn)
+			}
+
+			// Mark device as active
+			sessionSvc.MarkDeviceActive(deviceId)
+
+			// Transform to database model with scaled value
+			deviceData := model.DeviceData{
+				DeviceId:  deviceId,
+				ValueData: int(math.Round(req.ValueData * model.DeviceScale)),
+			}
+
+			// Pass to the Batcher Service
+			svc.Add(deviceData)
+		}
 	}
 
 	// FIX: Check why the scanner loop stopped (Error vs normal EOF)

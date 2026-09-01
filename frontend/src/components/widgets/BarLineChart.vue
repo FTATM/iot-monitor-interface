@@ -15,7 +15,7 @@
 
       <div v-else-if="isLoadingHistory" class="absolute inset-0 flex flex-col items-center justify-center text-sm gap-3" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
         <span class="loading loading-spinner loading-md text-primary"></span>
-        {{ $t('barLineChart.aggregating') }}
+        {{ $t('common.fetchingHistory') }}
       </div>
 
       <v-chart v-else-if="isReady" class="absolute inset-0 w-full h-full" :option="chartOption" autoresize />

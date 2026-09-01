@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -173,6 +174,16 @@ func (h *DeviceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	go func(oldName string) {
+		// Use a fresh context since the request context will be cancelled immediately
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := h.deviceGatewayClient.InvalidateDeviceCache(bgCtx, oldName); err != nil {
+			slog.Error("Failed to invalidate gateway cache", slog.String("error", err.Error()))
+		}
+	}(device.OldName)
 
 	respondJson(w, http.StatusOK, &res)
 }
@@ -357,62 +368,7 @@ func (h *DeviceHandler) TriggerCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 5. Bundle devices by GroupId (for Gateway) and isolate single devices
-	groupedCommands := make(map[int]model.GatewayCommand)
-	var finalCommands []model.GatewayCommand
-
-	for _, dev := range devices {
-		devIDStr := strconv.Itoa(dev.DeviceId)
-
-		// Determine the correct command (Base vs Override)
-		cmdStr := actionPayload.Command
-		if override, exists := actionPayload.DeviceOverrides[devIDStr]; exists && override != "" {
-			cmdStr = override
-		}
-
-		payloadItem := model.DeviceCommand{
-			DeviceName: dev.DeviceName,
-			Cmd:        cmdStr,
-		}
-
-		// ⚡ NEW: Check if the group actually has a protocol to act as a Gateway
-		hasGatewayProtocol := dev.GroupProtocol != nil && *dev.GroupProtocol != "" && *dev.GroupProtocol != "none"
-
-		// ⚡ FIX: Bundle into a Gateway ONLY if IsGroup is true, it has a group ID, AND it has a Gateway Protocol
-		if req.IsGroup && dev.GroupId != nil && *dev.GroupId > 0 && hasGatewayProtocol {
-			grpID := *dev.GroupId
-
-			if existing, ok := groupedCommands[grpID]; ok {
-				existing.Payload = append(existing.Payload, payloadItem)
-				groupedCommands[grpID] = existing
-			} else {
-				// We safely know the protocol exists because of hasGatewayProtocol
-				groupedCommands[grpID] = model.GatewayCommand{
-					DeviceId: 0,
-					GroupId:  grpID,
-					Protocol: *dev.GroupProtocol,
-					Payload:  []model.DeviceCommand{payloadItem},
-				}
-			}
-		} else {
-			// ⚡ SINGLE DEVICE LOGIC:
-			// Triggers if req.IsGroup is false, OR if the Group has no protocol
-			protocol := "none"
-			if dev.Protocol != nil && *dev.Protocol != "" {
-				protocol = *dev.Protocol
-			}
-
-			finalCommands = append(finalCommands, model.GatewayCommand{
-				DeviceId: dev.DeviceId,
-				GroupId:  0,
-				Protocol: protocol,
-				Payload:  []model.DeviceCommand{payloadItem},
-			})
-		}
-	}
-
-	for _, cmd := range groupedCommands {
-		finalCommands = append(finalCommands, cmd)
-	}
+	finalCommands := model.BuildGatewayCommands(devices, actionPayload, req.IsGroup)
 
 	// 6. Send all commands to the Gateway via the client
 	for _, cmd := range finalCommands {
@@ -1054,7 +1010,7 @@ func (h *DeviceHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.service.UpdateDeviceGroup(r.Context(), deviceGroup, authUserId)
+	err = h.service.UpdateDeviceGroup(r.Context(), &deviceGroup, authUserId)
 	if err != nil {
 		if errors.Is(err, model.ErrDuplicate) {
 			res.Message = "Device Group Duplicate"
@@ -1068,6 +1024,16 @@ func (h *DeviceHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	go func(oldName string) {
+		// Use a fresh context since the request context will be cancelled immediately
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := h.deviceGatewayClient.InvalidateGroupCache(bgCtx, oldName); err != nil {
+			slog.Error("Failed to invalidate gateway cache", slog.String("error", err.Error()))
+		}
+	}(deviceGroup.OldName)
 
 	respondJson(w, http.StatusOK, &res)
 }

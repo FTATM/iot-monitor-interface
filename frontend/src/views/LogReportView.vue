@@ -198,7 +198,6 @@ const deviceColumns = computed(() => [
   { header: t('logReport.table.timestamp'), accessorKey: 'receivedAt', meta: { headerClass: 'w-48' } },
   { header: t('common.deviceId'), accessorKey: 'deviceId', meta: { headerClass: 'w-32 font-bold' } },
   { header: t('common.deviceName'), accessorKey: 'deviceName', meta: { headerClass: 'w-32' } },
-  { header: t('logReport.table.source'), accessorKey: 'source', meta: { headerClass: 'w-32' } },
   { header: t('logReport.table.value'), accessorKey: 'valueData', meta: { headerClass: 'w-24' } }
 ]);
 

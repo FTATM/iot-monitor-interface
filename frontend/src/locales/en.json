@@ -322,11 +322,12 @@
     "selectTargetDevice": "Select Target Device",
     "selectTargetGroup": "Select Target Group",
     "taskCommand": "Task / Action Command",
-    "taskCommandPlaceholder": "e.g., reboot, sync_data",
+    "taskCommandPlaceholder": "e.g., reboot, 0, 1",
     "scheduleType": "Schedule Type",
     "oneTimeEvent": "One-Time Event",
     "recurringCron": "Recurring (Cron)",
     "runFrequency": "Run Frequency",
+    "deleteWarning": "Are you sure you want to delete the scheduler?",
     "freq": {
       "min5": "Every 5 Minutes",
       "min15": "Every 15 Minutes",
@@ -536,7 +537,6 @@
   },
   "barLineChart": {
     "newChart": "Bar & Line Trend",
-    "aggregating": "Aggregating historical data...",
     "config": {
       "dataGrouping": "Historical Data Grouping",
       "bucketInterval": "Bucket Interval",

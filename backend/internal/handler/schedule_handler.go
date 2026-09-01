@@ -1,21 +1,24 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/FTATM/iot-monitor-interface/internal/auth"
 	"github.com/FTATM/iot-monitor-interface/internal/model"
 )
 
 type ScheduleHandler struct {
-	service     model.ScheduleService
-	roleService model.RoleService
+	service              model.ScheduleService
+	roleService          model.RoleService
+	scheduleEngineClient model.ScheduleEngineClient
 }
 
-func NewScheduleHandler(service model.ScheduleService, roleService model.RoleService) *ScheduleHandler {
-	return &ScheduleHandler{service: service, roleService: roleService}
+func NewScheduleHandler(service model.ScheduleService, roleService model.RoleService, scheduleEngineClient model.ScheduleEngineClient) *ScheduleHandler {
+	return &ScheduleHandler{service: service, roleService: roleService, scheduleEngineClient: scheduleEngineClient}
 }
 
 func (h *ScheduleHandler) GetAllDetail(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +86,15 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	go func(id string) {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := h.scheduleEngineClient.SyncSchedule(bgCtx, id); err != nil {
+			slog.Error("Failed to sync schedule to engine", slog.String("scheduleId", id), slog.String("error", err.Error()))
+		}
+	}(createScheduleReq.ScheduleId)
+
 	respondJson(w, http.StatusOK, &res)
 }
 
@@ -126,14 +138,7 @@ func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userId, ok := r.Context().Value(auth.AuthUserIdKey).(int)
-	if !ok {
-		res.Message = "Can't get userId"
-		respondJson(w, http.StatusInternalServerError, &res)
-		return
-	}
-
-	err = h.service.UpdateSchedule(r.Context(), &updateScheduleReq, userId)
+	err = h.service.UpdateSchedule(r.Context(), &updateScheduleReq, authUserId)
 	if err != nil {
 		res.Message = "Error"
 		slog.ErrorContext(r.Context(), res.Message,
@@ -142,6 +147,71 @@ func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		respondJson(w, http.StatusInternalServerError, &res)
 		return
 	}
+
+	go func(id string) {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := h.scheduleEngineClient.SyncSchedule(bgCtx, id); err != nil {
+			slog.Error("Failed to sync schedule to engine", slog.String("scheduleId", id), slog.String("error", err.Error()))
+		}
+	}(updateScheduleReq.ScheduleId)
+
+	respondJson(w, http.StatusOK, &res)
+}
+
+func (h *ScheduleHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	var res Response
+	var err error
+
+	authUserId, ok := r.Context().Value(auth.AuthUserIdKey).(int)
+	if !ok {
+		res.Message = "Can't get userId"
+		respondJson(w, http.StatusInternalServerError, &res)
+		return
+	}
+
+	acc := &model.Access{
+		UserId:     authUserId,
+		MenuName:   "Scheduler",
+		ActionName: "Delete",
+	}
+
+	hasAccess, err := h.roleService.Access(r.Context(), acc)
+	if err != nil {
+		res.Message = "Error"
+		slog.ErrorContext(r.Context(), res.Message,
+			slog.String("track", err.Error()),
+		)
+		respondJson(w, http.StatusInternalServerError, &res)
+		return
+	}
+
+	if !hasAccess {
+		res.Message = "No Access"
+		respondJson(w, http.StatusBadRequest, &res)
+		return
+	}
+
+	idStr := r.PathValue("id")
+	err = h.service.DeleteSchedule(r.Context(), idStr, authUserId)
+	if err != nil {
+		res.Message = "Error"
+		slog.ErrorContext(r.Context(), res.Message,
+			slog.String("track", err.Error()),
+		)
+		respondJson(w, http.StatusInternalServerError, &res)
+		return
+	}
+
+	go func(id string) {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := h.scheduleEngineClient.UnsyncSchedule(bgCtx, id); err != nil {
+			slog.Error("Failed to unsync schedule to engine", slog.String("scheduleId", id), slog.String("error", err.Error()))
+		}
+	}(idStr)
 
 	respondJson(w, http.StatusOK, &res)
 }

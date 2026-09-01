@@ -49,6 +49,7 @@ type ScheduleDetail struct {
 }
 
 type CreateScheduleReq struct {
+	ScheduleId     string      `json:"scheduleId"`
 	DeviceId       *int        `json:"deviceId"`
 	DeviceGroupId  *int        `json:"deviceGroupId"`
 	TaskAction     DynamicJSON `json:"taskAction"`
@@ -71,20 +72,17 @@ type UpdateScheduleReq struct {
 	CronExpression *string     `json:"cronExpression"`
 }
 
-type ScheduleClient interface {
-	SyncSchedule(ctx context.Context, scheduleID string) error
-	UnsyncSchedule(ctx context.Context, scheduleID string) error
-}
-
 type ScheduleRepository interface {
 	GetById(ctx context.Context, id string) (*Schedule, error)
 	GetAll(ctx context.Context) ([]Schedule, error)
 	Create(ctx context.Context, sched *Schedule) error
 	Update(ctx context.Context, sched *Schedule) error
+	Delete(ctx context.Context, schedId string) error
 }
 
 type ScheduleService interface {
 	GetAllDetail(ctx context.Context) ([]ScheduleDetail, error)
 	CreateSchedule(ctx context.Context, sched *CreateScheduleReq, userId int) error
 	UpdateSchedule(ctx context.Context, sched *UpdateScheduleReq, userId int) error
+	DeleteSchedule(ctx context.Context, schedId string, userId int) error
 }

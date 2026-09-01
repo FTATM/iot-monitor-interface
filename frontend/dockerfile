@@ -1,5 +1,5 @@
 # Stage 1: Build the Vue application
-FROM oven/bun:1.3-alpine AS builder
+FROM oven/bun:1.4-alpine AS builder
 WORKDIR /app
 
 # Copy package.json and Bun's lockfile (if you have generated one locally)
@@ -15,6 +15,10 @@ RUN bun run build
 
 # Stage 2: Serve with Nginx and proxy to Go
 FROM nginx:1.31-alpine
+
+# Install timezone data
+RUN apk add --no-cache tzdata
+
 # Copy the built Vue files to Nginx's default public folder
 COPY --from=builder /app/dist /usr/share/nginx/html
 # Overwrite the default Nginx config with our custom proxy routing

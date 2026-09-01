@@ -95,11 +95,10 @@
             <label class="form-control w-full sm:col-span-2">
               <div class="label pb-1">
                 <span class="label-text font-semibold">{{ $t('common.deviceName') }}</span>
-                <span v-if="isEditing" class="badge badge-neutral badge-sm">{{ $t('common.readOnly') }}</span>
               </div>
-              <input type="text" v-model="form.deviceName" :placeholder="$t('device.deviceNamePlaceholder')" @blur="v$.deviceName.$touch()"
-                :disabled="isEditing"
-                :class="['input input-bordered w-full disabled:bg-base-200/50 disabled:text-base-content/60', { 'input-error': v$.deviceName.$error }]" />
+              <input type="text" v-model="form.deviceName" :placeholder="$t('device.deviceNamePlaceholder')"
+                @blur="v$.deviceName.$touch()"
+                :class="['input input-bordered w-full', { 'input-error': v$.deviceName.$error }]" />
               <div class="label px-1 py-1 h-6">
                 <span v-if="v$.deviceName.$error" class="label-text-alt text-error font-medium">
                   {{ v$.deviceName.$errors[0].$message }}
@@ -137,10 +136,13 @@
               class="sm:col-span-2 p-4 bg-base-200/50 rounded-box border border-base-200 flex flex-col gap-3 mt-1">
 
               <div class="flex items-center justify-between">
-                <h4 class="font-bold text-sm text-base-content uppercase tracking-wider m-0">{{ $t('device.networkStatus') }}</h4>
+                <h4 class="font-bold text-sm text-base-content uppercase tracking-wider m-0">{{
+                  $t('device.networkStatus')
+                  }}</h4>
 
                 <!-- ⚡ NEW: Disabled Ping Display Logic -->
-                <div v-if="!form.protocol || form.protocol === 'none'" class="badge badge-warning badge-sm font-semibold opacity-80">
+                <div v-if="!form.protocol || form.protocol === 'none'"
+                  class="badge badge-warning badge-sm font-semibold opacity-80">
                   {{ $t('device.cannotPingNoProtocol') }}
                 </div>
                 <button v-else type="button" @click="testConnection" class="btn btn-xs btn-outline btn-secondary"
@@ -458,15 +460,14 @@ const submitForm = async () => {
   const isFormValid = await v$.value.$validate();
   if (!isFormValid) return;
 
-  const payload = { 
-    deviceName: form.value.deviceName, 
+  const payload = {
+    deviceName: form.value.deviceName,
     protocol: form.value.protocol === 'none' ? null : form.value.protocol, // ⚡ Strip 'none' back to null for DB
-    active: form.value.active 
+    active: form.value.active
   };
 
   if (isEditing.value) {
     payload.deviceId = editingDeviceId.value;
-    delete payload.deviceName;
     await deviceUpdatedApi('/device/update', payload, 'PUT');
     if (!deviceUpdatedError.value) {
       closeModal();

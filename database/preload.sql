@@ -83,7 +83,7 @@ SELECT m.menu_id, a.action_id
 FROM menu m
 CROSS JOIN action a
 WHERE m.menu_name = 'Scheduler' 
-  AND a.action_name IN ('Display','Create', 'Update')
+  AND a.action_name IN ('Display','Create', 'Update','Delete')
 ON CONFLICT (menu_id, action_id) DO NOTHING;
 
 INSERT INTO menu_action (menu_id, action_id)

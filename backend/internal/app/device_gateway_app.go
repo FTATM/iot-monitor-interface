@@ -25,12 +25,12 @@ type ServerDeviceGateway struct {
 	server               *http.Server
 	gatewayService       model.DeviceGatewayService
 	sessionService       model.SessionManagerService
+	cacheService         model.CacheService
 	startDeviceRuleAlert func()
 }
 
 func (a *ServerDeviceGateway) Run(ctx context.Context) error {
 	slog.Info("Device Gateway starting listeners...")
-
 	gatewayPort := os.Getenv("DEVICE_GATEWAY_PORT")
 	if gatewayPort == "" {
 		gatewayPort = "8090"
@@ -42,18 +42,19 @@ func (a *ServerDeviceGateway) Run(ctx context.Context) error {
 	}
 	go a.startDeviceRuleAlert()
 
-	// Start Protocol Listeners (Injecting SessionService so they can register connections)
-	go listener.StartTCPServer(ctx, ":"+gatewayPort, a.gatewayService, a.sessionService)
-	go listener.StartUDPServer(ctx, ":"+gatewayPort, a.gatewayService, a.sessionService)
+	// ⚡ NEW: Start the cache sweeper in the background
+	a.cacheService.StartSweeper(ctx)
+	a.sessionService.StartSweeper(ctx)
+
+	// ⚡ INJECTION: Pass the new cacheService into the listeners!
+	go listener.StartTCPServer(ctx, ":"+gatewayPort, a.gatewayService, a.sessionService, a.cacheService)
+	go listener.StartUDPServer(ctx, ":"+gatewayPort, a.gatewayService, a.sessionService, a.cacheService)
 
 	brokerURL := os.Getenv("MQTT_BROKER_URL")
 	if brokerURL != "" {
-		go listener.StartMQTTClient(ctx, brokerURL, a.gatewayService, a.sessionService)
+		go listener.StartMQTTClient(ctx, brokerURL, a.gatewayService, a.sessionService, a.cacheService)
 	}
 
-	go listener.StartCacheSweeper(ctx)
-
-	// Start HTTP Server for Telemetry and Internal Commands
 	slog.Info(fmt.Sprintf("Gateway HTTP Server starting on %s", a.server.Addr))
 	return a.server.ListenAndServe()
 }
@@ -128,12 +129,13 @@ func InitializeDeviceGateway(ctx context.Context) (App, error) {
 		config.Line{},
 	)
 
+	cacheService := service.NewCacheService(gatewayRepo)
 	notificationService := service.NewNotificationService(txManager, notificationRepo, auditLogRepo, notificationClient, make(chan []model.DeviceData, qBuffer), cooldownNotifSend)
 	gatewayService := service.NewDeviceGatewayService(gatewayRepo, qBuffer, qTimeout, notificationService)
-	sessionService := service.NewSessionManagerService(gatewayRepo)
+	sessionService := service.NewSessionManagerService(gatewayRepo, cacheService)
 
 	handlers := router.RouterHandlers{
-		DeviceGateway: handler.NewDeviceGatewayHandler(gatewayService, sessionService),
+		DeviceGateway: handler.NewDeviceGatewayHandler(gatewayService, sessionService, cacheService),
 	}
 
 	mux := router.SetupDeviceGateway(handlers)
@@ -156,6 +158,7 @@ func InitializeDeviceGateway(ctx context.Context) (App, error) {
 		server:               server,
 		gatewayService:       gatewayService,
 		sessionService:       sessionService,
+		cacheService:         cacheService,
 		startDeviceRuleAlert: notificationService.StartDeviceRuleAlert,
 	}, nil
 }

@@ -147,7 +147,7 @@ func InitializeApi(ctx context.Context) (App, error) {
 	userService := service.NewUserService(txManager, userRepo, jwtKey, roleRepo, auditLogRepo)
 	deviceService := service.NewDeviceService(txManager, deviceRepo, auditLogRepo)
 	roleService := service.NewRoleService(txManager, roleRepo, auditLogRepo)
-	scheduleService := service.NewScheduleService(txManager, scheduleRepo, auditLogRepo, scheduleClient)
+	scheduleService := service.NewScheduleService(txManager, scheduleRepo, auditLogRepo)
 	logReportService := service.NewLogReportService(logReportRepo)
 	notificationService := service.NewNotificationService(txManager, notificationRepo, auditLogRepo, notificationClient, make(chan []model.DeviceData), cooldownNotifSend)
 
@@ -158,7 +158,7 @@ func InitializeApi(ctx context.Context) (App, error) {
 		User:         handler.NewUserHandler(userService, roleService),
 		Device:       handler.NewDeviceHandler(deviceService, roleService, deviceGatewayClient, notificationClient),
 		Role:         handler.NewRoleHandler(roleService),
-		Schedule:     handler.NewScheduleHandler(scheduleService, roleService),
+		Schedule:     handler.NewScheduleHandler(scheduleService, roleService, scheduleClient),
 		LogReport:    handler.NewLogReportHandler(logReportService),
 		Notification: handler.NewNotificationHandler(notificationService, roleService),
 		S3File:       handler.NewS3FileHandler(s3Config),

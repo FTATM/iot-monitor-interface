@@ -123,3 +123,21 @@ func (r *scheduleRepo) Update(ctx context.Context, sched *model.Schedule) error 
 	return nil
 
 }
+
+func (r *scheduleRepo) Delete(ctx context.Context, schedId string) error {
+	const fname = "Delete"
+
+	query := `DELETE FROM schedule WHERE schedule_id = $1`
+
+	result, err := r.db(ctx).Exec(ctx, query, schedId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, pgx.ErrNoRows)
+	}
+
+	return nil
+
+}

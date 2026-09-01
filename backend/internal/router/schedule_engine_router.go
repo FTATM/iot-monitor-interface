@@ -19,7 +19,7 @@ func SetupSchedule(handlers RouterHandlers) *http.ServeMux {
 	syncSchedule := http.HandlerFunc(handlers.ScheduleEngine.SyncSchedule)
 	unsyncSchedule := http.HandlerFunc(handlers.ScheduleEngine.UnsyncSchedule)
 
-	scheduleEngine.Handle("POST /{id}/sync", secureMiddleware(syncSchedule))
-	scheduleEngine.Handle("DELETE /{id}/sync", secureMiddleware(unsyncSchedule))
+	scheduleEngine.Handle("POST /internal/sync", secureMiddleware(syncSchedule))
+	scheduleEngine.Handle("DELETE /internal/unsync/{id}", secureMiddleware(unsyncSchedule))
 	return mux
 }

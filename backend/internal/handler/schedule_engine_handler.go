@@ -2,7 +2,8 @@ package handler
 
 import (
 	"context"
-	"log"
+	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/FTATM/iot-monitor-interface/internal/model"
@@ -18,15 +19,29 @@ func NewScheduleEngineHandler(service model.ScheduleEngineService) *ScheduleEngi
 
 // Your main app calls this AFTER doing an INSERT or UPDATE in Postgres
 func (h *ScheduleEngineHandler) SyncSchedule(w http.ResponseWriter, r *http.Request) {
-	schedID := r.PathValue("id")
-	if len(schedID) < 32 {
-		http.Error(w, "Invalid UUID", http.StatusBadRequest)
+	var schedReq model.SyncJobReq
+	if err := json.NewDecoder(r.Body).Decode(&schedReq); err != nil {
+		http.Error(w, "Invalid body", http.StatusBadRequest)
+		slog.ErrorContext(r.Context(), "Error",
+			slog.String("track", err.Error()),
+		)
 		return
 	}
 
-	err := h.service.SyncJob(context.Background(), schedID)
+	if len(schedReq.ScheduleId) < 32 {
+		http.Error(w, "Invalid UUID", http.StatusBadRequest)
+		slog.ErrorContext(r.Context(), "Error",
+			slog.String("track", "Invalid UUID"),
+		)
+		return
+	}
+
+	err := h.service.SyncJob(context.Background(), schedReq.ScheduleId)
 	if err != nil {
 		http.Error(w, "Failed to sync job", http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "Error",
+			slog.String("track", err.Error()),
+		)
 		return
 	}
 
@@ -40,13 +55,17 @@ func (h *ScheduleEngineHandler) UnsyncSchedule(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Capture the boolean to check if it was actively running in memory[cite: 4]
+	// Capture the boolean to check if it was actively running in memory
 	wasRunning := h.service.CancelJob(schedID)
 
 	if wasRunning {
-		log.Printf("[HANDLER] Successfully removed active job %s from memory", schedID)
+		slog.InfoContext(r.Context(), "Successfully removed active job from memory",
+			slog.String("schedId", schedID),
+		)
 	} else {
-		log.Printf("[HANDLER] Job %s was not found in memory (it may have already finished or was previously unsynced)", schedID)
+		slog.InfoContext(r.Context(), "Job was not found in memory (it may have already finished or was previously unsynced)",
+			slog.String("schedId", schedID),
+		)
 	}
 
 	w.WriteHeader(http.StatusOK)

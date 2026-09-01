@@ -67,6 +67,7 @@ func SetupApi(handlers RouterHandlers) *http.ServeMux {
 	scheduleMux.HandleFunc("GET /getalldetail", handlers.Schedule.GetAllDetail)
 	scheduleMux.HandleFunc("POST /create", handlers.Schedule.Create)
 	scheduleMux.HandleFunc("PUT /update", handlers.Schedule.Update)
+	scheduleMux.HandleFunc("DELETE /delete/{id}", handlers.Schedule.Delete)
 
 	roleMux := http.NewServeMux()
 	mux.Handle("/role/", http.StripPrefix("/role", roleMux))

@@ -16,4 +16,5 @@ type SessionManagerService interface {
 	PopHTTPCommand(deviceId int) ([]DeviceCommand, bool)
 	MarkDeviceActive(deviceId int)
 	IsDeviceOnline(deviceId int) bool
+	StartSweeper(ctx context.Context)
 }

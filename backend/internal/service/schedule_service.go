@@ -8,15 +8,14 @@ import (
 )
 
 type scheduleService struct {
-	txManager            model.TransactionManager
-	prefixError          string
-	scheduleRepo         model.ScheduleRepository
-	auditLogRepo         model.AuditLogRepository
-	scheduleEngineClient model.ScheduleClient
+	txManager    model.TransactionManager
+	prefixError  string
+	scheduleRepo model.ScheduleRepository
+	auditLogRepo model.AuditLogRepository
 }
 
-func NewScheduleService(txManager model.TransactionManager, sr model.ScheduleRepository, alog model.AuditLogRepository, scheduleEngineClient model.ScheduleClient) model.ScheduleService {
-	return &scheduleService{txManager: txManager, prefixError: "scheduleService", scheduleRepo: sr, auditLogRepo: alog, scheduleEngineClient: scheduleEngineClient}
+func NewScheduleService(txManager model.TransactionManager, sr model.ScheduleRepository, alog model.AuditLogRepository) model.ScheduleService {
+	return &scheduleService{txManager: txManager, prefixError: "scheduleService", scheduleRepo: sr, auditLogRepo: alog}
 }
 
 func (s *scheduleService) GetAllDetail(ctx context.Context) ([]model.ScheduleDetail, error) {
@@ -45,6 +44,7 @@ func (s *scheduleService) GetAllDetail(ctx context.Context) ([]model.ScheduleDet
 	return scheduleDetails, nil
 
 }
+
 func (s *scheduleService) CreateSchedule(ctx context.Context, createdSched *model.CreateScheduleReq, userId int) error {
 	const fname = "CreateSchedule"
 	var err error
@@ -91,14 +91,16 @@ func (s *scheduleService) CreateSchedule(ctx context.Context, createdSched *mode
 		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
 
+	createdSched.ScheduleId = sched.ScheduleId // for sync sched service
+
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
-	s.scheduleEngineClient.SyncSchedule(ctx, sched.ScheduleId)
 
 	return nil
 
 }
+
 func (s *scheduleService) UpdateSchedule(ctx context.Context, updateSchedReq *model.UpdateScheduleReq, userId int) error {
 	const fname = "UpdateSchedule"
 	var err error
@@ -162,7 +164,52 @@ func (s *scheduleService) UpdateSchedule(ctx context.Context, updateSchedReq *mo
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
 	}
-	s.scheduleEngineClient.SyncSchedule(ctx, sched.ScheduleId)
+
+	return nil
+}
+
+func (s *scheduleService) DeleteSchedule(ctx context.Context, schedId string, authUserId int) error {
+	const fname = "DeleteSchedule"
+	var err error
+
+	sched, err := s.scheduleRepo.GetById(ctx, schedId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	tx, err := s.txManager.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	err = s.scheduleRepo.Delete(ctx, schedId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	oldData, err := model.StructToDynamicJSON(sched)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	audit := model.AuditLog{
+		EntityType: "schedule",
+		EntityId:   schedId,
+		Action:     model.DeleteAction,
+		ChangedBy:  authUserId,
+		OldData:    oldData,
+		NewData:    nil,
+	}
+
+	if err = s.auditLogRepo.Create(tx.Context(), []model.AuditLog{audit}); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
 
 	return nil
 }

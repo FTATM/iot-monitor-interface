@@ -1,7 +1,9 @@
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -17,7 +19,7 @@ type scheduleEngineClient struct {
 }
 
 // NewSchedulerClient creates a new HTTP client with a strict 5-second timeout
-func NewScheduleClient(baseURL, internalSecret string) model.ScheduleClient {
+func NewScheduleClient(baseURL, internalSecret string) model.ScheduleEngineClient {
 	return &scheduleEngineClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
@@ -30,10 +32,18 @@ func NewScheduleClient(baseURL, internalSecret string) model.ScheduleClient {
 
 func (c *scheduleEngineClient) SyncSchedule(ctx context.Context, scheduleID string) error {
 	const fname = "SyncSchedule"
-	url := fmt.Sprintf("%s/scheduleengine/%s/sync", c.baseURL, scheduleID)
+	url := fmt.Sprintf("%s/scheduleengine/internal/sync", c.baseURL)
 
-	// Create the POST request (No body needed, just the URL)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	body := model.SyncJobReq{
+		ScheduleId: scheduleID,
+	}
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", c.prefixError, fname, err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", c.prefixError, fname, err)
 	}
@@ -57,7 +67,7 @@ func (c *scheduleEngineClient) SyncSchedule(ctx context.Context, scheduleID stri
 
 func (c *scheduleEngineClient) UnsyncSchedule(ctx context.Context, scheduleID string) error {
 	const fname = "UnsyncSchedule"
-	url := fmt.Sprintf("%s/api/scheduleengine/%s/sync", c.baseURL, scheduleID)
+	url := fmt.Sprintf("%s/scheduleengine/internal/unsync/%s", c.baseURL, scheduleID)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"net"
 	"sync"
@@ -14,50 +13,47 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
+const activeThreshold = 5 * time.Minute
+const staleThreshold = 3 * time.Hour // How long before a device is considered permanently dead
+const sweepInterval = 1 * time.Hour  // How often the sweeper checks memory
+
 type sessionManagerService struct {
-	mu                sync.RWMutex
-	tcpConns          map[int]net.Conn
-	udpAddrs          map[int]UDPSession
-	httpQueue         map[int]QueuedCommand
-	mqttClient        mqtt.Client
-	udpServer         *net.UDPConn
-	lastActive        map[int]time.Time
-	deviceGatewayRepo model.DeviceGatewayRepository
-	prefixError       string
+	repo model.DeviceGatewayRepository
+
+	// Protocol Clients
+	mqttClient mqtt.Client
+	udpServer  *net.UDPConn
+
+	// Thread-safe registries mapped by Device ID
+	mu          sync.RWMutex
+	tcpConns    map[int]net.Conn
+	udpAddrs    map[int]*net.UDPAddr
+	httpQueues  map[int][]model.DeviceCommand
+	lastSeenMap map[int]time.Time
+
+	cacheSvc model.CacheService
 }
 
-type QueuedCommand struct {
-	Payload   []model.DeviceCommand
-	ExpiresAt time.Time
-}
-
-type UDPSession struct {
-	Addr     *net.UDPAddr
-	LastSeen time.Time
-}
-
-func NewSessionManagerService(deviceGatewayRepo model.DeviceGatewayRepository) model.SessionManagerService {
-	service := &sessionManagerService{
-		tcpConns:          make(map[int]net.Conn),
-		udpAddrs:          make(map[int]UDPSession),
-		httpQueue:         make(map[int]QueuedCommand),
-		lastActive:        make(map[int]time.Time),
-		deviceGatewayRepo: deviceGatewayRepo,
-		prefixError:       "sessionManagerService",
+// NewSessionManagerService satisfies the injection signature in app.go
+func NewSessionManagerService(repo model.DeviceGatewayRepository, cacheSvc model.CacheService) model.SessionManagerService {
+	return &sessionManagerService{
+		repo:        repo,
+		tcpConns:    make(map[int]net.Conn),
+		udpAddrs:    make(map[int]*net.UDPAddr),
+		httpQueues:  make(map[int][]model.DeviceCommand),
+		lastSeenMap: make(map[int]time.Time),
+		cacheSvc:    cacheSvc,
 	}
-
-	// Start the background cleanup process
-	service.startSweeper()
-
-	return service
 }
+
+// --- SETUP PROTOCOLS ---
 
 func (s *sessionManagerService) SetMQTTClient(client any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Type assertion back to mqtt.Client
-	if mqttClient, ok := client.(mqtt.Client); ok {
-		s.mqttClient = mqttClient
+	if c, ok := client.(mqtt.Client); ok {
+		s.mqttClient = c
+		slog.Info("SessionManager: MQTT client registered")
 	}
 }
 
@@ -65,28 +61,25 @@ func (s *sessionManagerService) SetUDPServer(conn *net.UDPConn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.udpServer = conn
+	slog.Info("SessionManager: UDP server registered")
 }
 
-func (s *sessionManagerService) RegisterTCP(deviceId int, newConn net.Conn) {
+// --- DEVICE REGISTRATIONS ---
+
+func (s *sessionManagerService) RegisterTCP(deviceId int, conn net.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	// THE TAKEOVER: If an old connection exists for this ID, forcefully close it.
-	if oldConn, exists := s.tcpConns[deviceId]; exists && oldConn != newConn {
-		slog.Warn("Device Takeover: Closing old TCP socket for new connection", slog.Int("deviceId", deviceId))
+	// Close any existing stale connection
+	if oldConn, exists := s.tcpConns[deviceId]; exists && oldConn != conn {
 		oldConn.Close()
 	}
-
-	// Save the new connection
-	s.tcpConns[deviceId] = newConn
+	s.tcpConns[deviceId] = conn
 }
 
 func (s *sessionManagerService) UnregisterTCP(deviceId int, conn net.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	// THE SAFE DELETE: Only remove the device if the map holds THIS exact connection
-	if existingConn, exists := s.tcpConns[deviceId]; exists && existingConn == conn {
+	if existing, exists := s.tcpConns[deviceId]; exists && existing == conn {
 		delete(s.tcpConns, deviceId)
 	}
 }
@@ -94,161 +87,219 @@ func (s *sessionManagerService) UnregisterTCP(deviceId int, conn net.Conn) {
 func (s *sessionManagerService) RegisterUDP(deviceId int, addr *net.UDPAddr) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.udpAddrs[deviceId] = UDPSession{
-		Addr:     addr,
-		LastSeen: time.Now(),
-	}
-}
-
-func (s *sessionManagerService) RouteCommand(ctx context.Context, req *model.GatewayCommand) error {
-	const fname = "RouteCommand"
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	switch req.Protocol {
-	case "MQTT":
-		if s.mqttClient != nil {
-			// ⚡ FIX 1: Convert the Go slice into a JSON byte array
-			jsonBytes, err := json.Marshal(req.Payload)
-			if err != nil {
-				log.Println("Error marshalling JSON:", err)
-				return err
-			}
-
-			if req.DeviceId > 0 {
-				if len(req.Payload) == 0 {
-					return fmt.Errorf("empty payload for device %d", req.DeviceId)
-				}
-
-				// Using the optimized approach we discussed!
-				name := req.Payload[0].DeviceName
-				topic := fmt.Sprintf("device/%s/cmd", name)
-
-				// ⚡ FIX 2: Pass 'jsonBytes' here, NOT req.Payload
-				token := s.mqttClient.Publish(topic, 1, false, jsonBytes)
-				token.Wait()
-				return token.Error()
-
-			} else if req.GroupId > 0 {
-				name, err := s.deviceGatewayRepo.GetDeviceGroupNameById(ctx, req.GroupId)
-				if err != nil {
-					return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
-				}
-				topic := fmt.Sprintf("device-group/%s/cmd", name)
-
-				// ⚡ FIX 3: Pass 'jsonBytes' here, NOT req.Payload
-				token := s.mqttClient.Publish(topic, 1, false, jsonBytes)
-				token.Wait()
-				return token.Error()
-			}
-		}
-		return fmt.Errorf("MQTT client not available")
-
-	case "TCP":
-		if conn, exists := s.tcpConns[req.DeviceId]; exists {
-			jsonBytes, err := json.Marshal(req.Payload)
-			if err != nil {
-				log.Println("Error marshalling JSON:", err)
-				return err
-			}
-			_, err = conn.Write(jsonBytes)
-			return err
-		}
-		return fmt.Errorf("device %d TCP connection offline", req.DeviceId)
-
-	case "UDP":
-		if session, exists := s.udpAddrs[req.DeviceId]; exists && s.udpServer != nil {
-			jsonBytes, err := json.Marshal(req.Payload)
-			if err != nil {
-				log.Println("Error marshalling JSON:", err)
-				return err
-			}
-			_, err = s.udpServer.WriteToUDP(jsonBytes, session.Addr)
-			return err
-		}
-		return fmt.Errorf("device %d UDP address unknown or server offline", req.DeviceId)
-
-	case "HTTP":
-		s.httpQueue[req.DeviceId] = QueuedCommand{
-			Payload:   req.Payload,
-			ExpiresAt: time.Now().Add(60 * time.Second),
-		}
-		return nil
-	}
-
-	return fmt.Errorf("unsupported protocol: %s", req.Protocol)
-}
-
-func (s *sessionManagerService) PopHTTPCommand(deviceId int) ([]model.DeviceCommand, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	queuedCmd, exists := s.httpQueue[deviceId]
-	if !exists {
-		return queuedCmd.Payload, false
-	}
-
-	// Always delete it so it never gets fetched twice
-	delete(s.httpQueue, deviceId)
-
-	// Check if the command has expired (Stale Data Protection)
-	if time.Now().After(queuedCmd.ExpiresAt) {
-		// It expired, so we return false as if it was empty
-		return queuedCmd.Payload, false
-	}
-
-	// It is valid and fresh, send it to the device!
-	return queuedCmd.Payload, true
+	s.udpAddrs[deviceId] = addr
 }
 
 func (s *sessionManagerService) MarkDeviceActive(deviceId int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.lastActive[deviceId] = time.Now()
+	s.lastSeenMap[deviceId] = time.Now()
 }
 
 func (s *sessionManagerService) IsDeviceOnline(deviceId int) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// 1. If it has an active TCP socket, it is 100% online
-	if _, exists := s.tcpConns[deviceId]; exists {
-		return true
+	lastSeen, exists := s.lastSeenMap[deviceId]
+	if !exists {
+		return false
 	}
 
-	if lastTime, exists := s.lastActive[deviceId]; exists {
-		// If the last active time is within the last 3 minutes, consider it online
-		if time.Since(lastTime) < 3*time.Minute {
-			return true
-		}
-	}
+	// Consider online if seen within threshold, OR if it has an active TCP socket
+	isRecent := time.Since(lastSeen) <= activeThreshold
+	_, hasTCP := s.tcpConns[deviceId]
 
-	return false
+	return isRecent || hasTCP
 }
 
-func (s *sessionManagerService) startSweeper() {
-	ticker := time.NewTicker(1 * time.Hour)
+// --- COMMAND ROUTING ---
 
+func (s *sessionManagerService) RouteCommand(ctx context.Context, req *model.GatewayCommand) error {
+	switch req.Protocol {
+	case "MQTT":
+		return s.routeMQTT(ctx, req)
+	case "TCP":
+		return s.routeTCP(ctx, req)
+	case "UDP":
+		return s.routeUDP(ctx, req)
+	case "HTTP":
+		return s.routeHTTP(ctx, req)
+	default:
+		return fmt.Errorf("unsupported protocol: %s", req.Protocol)
+	}
+}
+
+func (s *sessionManagerService) routeMQTT(ctx context.Context, req *model.GatewayCommand) error {
+	s.mu.RLock()
+	client := s.mqttClient
+	s.mu.RUnlock()
+
+	if client == nil {
+		return fmt.Errorf("MQTT client not initialized")
+	}
+
+	payloadBytes, err := json.Marshal(req.Payload)
+	if err != nil {
+		return err
+	}
+
+	var topic string
+	if req.GroupId > 0 {
+		groupName, err := s.repo.GetDeviceGroupNameById(ctx, req.GroupId)
+		if err != nil || groupName == "" {
+			return fmt.Errorf("failed to fetch group name for id %d: %w", req.GroupId, err)
+		}
+		topic = fmt.Sprintf("device-group/%s/cmd", groupName)
+	} else if req.DeviceId > 0 {
+		deviceName, err := s.repo.GetDeviceNameById(ctx, req.DeviceId)
+		if err != nil || deviceName == "" {
+			return fmt.Errorf("failed to fetch device name for id %d: %w", req.DeviceId, err)
+		}
+		topic = fmt.Sprintf("device/%s/cmd", deviceName)
+	} else {
+		return fmt.Errorf("missing target ID for MQTT command")
+	}
+
+	token := client.Publish(topic, 1, false, payloadBytes)
+	token.Wait()
+	if token.Error() != nil {
+		return token.Error()
+	}
+
+	slog.InfoContext(ctx, "Routed command via MQTT", slog.String("topic", topic))
+	return nil
+}
+
+func (s *sessionManagerService) routeTCP(ctx context.Context, req *model.GatewayCommand) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, cmd := range req.Payload {
+		id, err := s.cacheSvc.GetDeviceIdByName(ctx, cmd.DeviceName)
+		if err != nil || id <= 0 {
+			slog.Warn("Unknown device in TCP payload routing", slog.String("device", cmd.DeviceName))
+			continue
+		}
+
+		conn, exists := s.tcpConns[id]
+		if !exists {
+			slog.Warn("Device offline or TCP connection missing", slog.Int("deviceId", id))
+			continue
+		}
+
+		cmdBytes, _ := json.Marshal(cmd)
+		cmdBytes = append(cmdBytes, '\n')
+
+		if _, err := conn.Write(cmdBytes); err != nil {
+			slog.Error("Failed to write to TCP connection", slog.Int("deviceId", id), slog.String("err", err.Error()))
+		}
+	}
+	return nil
+}
+
+func (s *sessionManagerService) routeUDP(ctx context.Context, req *model.GatewayCommand) error {
+	s.mu.RLock()
+	server := s.udpServer
+	s.mu.RUnlock()
+
+	if server == nil {
+		return fmt.Errorf("UDP server not initialized")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, cmd := range req.Payload {
+		id, err := s.cacheSvc.GetDeviceIdByName(ctx, cmd.DeviceName)
+		if err != nil || id <= 0 {
+			continue
+		}
+
+		addr, exists := s.udpAddrs[id]
+		if !exists {
+			continue
+		}
+
+		cmdBytes, _ := json.Marshal(cmd)
+		if _, err := server.WriteToUDP(cmdBytes, addr); err != nil {
+			slog.Error("Failed to write to UDP", slog.Int("deviceId", id), slog.String("err", err.Error()))
+		}
+	}
+	return nil
+}
+
+func (s *sessionManagerService) routeHTTP(ctx context.Context, req *model.GatewayCommand) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, cmd := range req.Payload {
+		id, err := s.cacheSvc.GetDeviceIdByName(ctx, cmd.DeviceName)
+		if err != nil || id <= 0 {
+			continue
+		}
+		s.httpQueues[id] = append(s.httpQueues[id], cmd)
+	}
+	return nil
+}
+
+// --- HTTP POLLING QUEUE ---
+
+func (s *sessionManagerService) PopHTTPCommand(deviceId int) ([]model.DeviceCommand, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	commands, exists := s.httpQueues[deviceId]
+	if !exists || len(commands) == 0 {
+		return nil, false
+	}
+
+	// Empty the queue after popping
+	delete(s.httpQueues, deviceId)
+	return commands, true
+}
+
+func (s *sessionManagerService) StartSweeper(ctx context.Context) {
+	ticker := time.NewTicker(sweepInterval)
 	go func() {
-		for range ticker.C {
-			s.mu.Lock()
-			now := time.Now()
-
-			// 1. Clean up HTTP Queue
-			for deviceId, cmd := range s.httpQueue {
-				if now.After(cmd.ExpiresAt) {
-					delete(s.httpQueue, deviceId)
-				}
+		for {
+			select {
+			case <-ticker.C:
+				s.sweepStaleConnections()
+			case <-ctx.Done():
+				ticker.Stop()
+				slog.Info("Shutting down session manager sweeper...")
+				return
 			}
-
-			// 2. Clean up Dead UDP Devices (e.g., no packets in 24 hours)
-			udpTimeout := now.Add(-24 * time.Hour)
-			for deviceId, session := range s.udpAddrs {
-				if session.LastSeen.Before(udpTimeout) {
-					delete(s.udpAddrs, deviceId)
-				}
-			}
-
-			s.mu.Unlock()
 		}
 	}()
+}
+
+func (s *sessionManagerService) sweepStaleConnections() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	clearedCount := 0
+
+	// Iterate through the lastSeenMap to find devices that haven't reported in
+	for deviceId, lastSeen := range s.lastSeenMap {
+		if now.Sub(lastSeen) > staleThreshold {
+			// Device is stale, clear all its memory footprints
+			delete(s.lastSeenMap, deviceId)
+			delete(s.httpQueues, deviceId)
+			delete(s.udpAddrs, deviceId)
+
+			// If a TCP connection somehow got orphaned without triggering UnregisterTCP, forcefully close and delete it
+			if conn, exists := s.tcpConns[deviceId]; exists {
+				conn.Close()
+				delete(s.tcpConns, deviceId)
+			}
+
+			clearedCount++
+		}
+	}
+
+	if clearedCount > 0 {
+		slog.Debug("Session manager swept dead connections", slog.Int("cleared", clearedCount))
+	}
 }

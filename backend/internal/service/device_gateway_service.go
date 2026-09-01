@@ -22,6 +22,9 @@ type deviceGatewayService struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	notifService model.NotificationService
+
+	deviceNameCache  sync.Map
+	deviceGroupCache sync.Map
 }
 
 func NewDeviceGatewayService(repo model.DeviceGatewayRepository, batchSize int, timeout time.Duration, notifService model.NotificationService) model.DeviceGatewayService {

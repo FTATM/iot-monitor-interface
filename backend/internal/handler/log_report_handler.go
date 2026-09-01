@@ -275,7 +275,7 @@ func (h *LogReportHandler) exportSystemLogs(w http.ResponseWriter, r *http.Reque
 
 		for i, log := range logs {
 			rowNum := i + 2
-			f.SetCellValue("Sheet1", fmt.Sprintf("A%d", rowNum), log.CreatedAt.Format("2006-01-02 15:04:05"))
+			f.SetCellValue("Sheet1", fmt.Sprintf("A%d", rowNum), log.CreatedAt.Format(time.RFC3339))
 			f.SetCellValue("Sheet1", fmt.Sprintf("B%d", rowNum), log.EntityType)
 			f.SetCellValue("Sheet1", fmt.Sprintf("C%d", rowNum), log.EntityId)
 			f.SetCellValue("Sheet1", fmt.Sprintf("D%d", rowNum), log.Action)
@@ -291,7 +291,7 @@ func (h *LogReportHandler) exportSystemLogs(w http.ResponseWriter, r *http.Reque
 // --- DEVICE LOGS (Telemetry) EXPORTER ---
 func (h *LogReportHandler) exportDeviceLogs(w http.ResponseWriter, r *http.Request, format string, filter model.LogFilter) {
 	var res Response
-	logs, err := h.service.GetDeviceLogsForExport(r.Context(), filter)
+	logs, err := h.service.GetDeviceLogsForExport(r.Context(), filter) // already scale device
 	if err != nil {
 		res.Message = "Failed to fetch device logs"
 		slog.ErrorContext(r.Context(), res.Message,
@@ -308,15 +308,14 @@ func (h *LogReportHandler) exportDeviceLogs(w http.ResponseWriter, r *http.Reque
 		w.Header().Set("Content-Disposition", "attachment;filename=device_logs.csv")
 		writer := csv.NewWriter(w)
 		// ⚡ Added Device Name
-		writer.Write([]string{"Timestamp", "Device ID", "Device Name", "Source", "Value"})
+		writer.Write([]string{"Timestamp", "Device ID", "Device Name", "Value"})
 
 		for _, log := range logs {
 			writer.Write([]string{
 				log.ReceivedAt.Format(time.RFC3339),
 				fmt.Sprintf("%d", log.DeviceId),
 				log.DeviceName, // ⚡ Added
-				log.Source,
-				fmt.Sprintf("%d", log.ValueData),
+				fmt.Sprintf("%.2f", log.ValueData),
 			})
 		}
 		writer.Flush()
@@ -326,26 +325,23 @@ func (h *LogReportHandler) exportDeviceLogs(w http.ResponseWriter, r *http.Reque
 		w.Header().Set("Content-Disposition", "attachment;filename=device_logs.json")
 
 		var exportData []struct {
-			Timestamp  string `json:"timestamp"`
-			DeviceId   int    `json:"deviceId"`
-			DeviceName string `json:"deviceName"` // ⚡ Added
-			Source     string `json:"source"`
-			Value      int    `json:"value"`
+			Timestamp  string  `json:"timestamp"`
+			DeviceId   int     `json:"deviceId"`
+			DeviceName string  `json:"deviceName"`
+			Value      float64 `json:"value"`
 		}
 
 		for _, log := range logs {
 			exportData = append(exportData, struct {
-				Timestamp  string `json:"timestamp"`
-				DeviceId   int    `json:"deviceId"`
-				DeviceName string `json:"deviceName"`
-				Source     string `json:"source"`
-				Value      int    `json:"value"`
+				Timestamp  string  `json:"timestamp"`
+				DeviceId   int     `json:"deviceId"`
+				DeviceName string  `json:"deviceName"`
+				Value      float64 `json:"value"`
 			}{
 				Timestamp:  log.ReceivedAt.Format(time.RFC3339),
 				DeviceId:   log.DeviceId,
-				DeviceName: log.DeviceName, // ⚡ Added
-				Source:     log.Source,
-				Value:      log.ValueData,
+				DeviceName: log.DeviceName,
+				Value:      log.ValueData, // Now perfectly preserves 1.56!
 			})
 		}
 		json.NewEncoder(w).Encode(exportData)
@@ -355,15 +351,13 @@ func (h *LogReportHandler) exportDeviceLogs(w http.ResponseWriter, r *http.Reque
 		f.SetCellValue("Sheet1", "A1", "Timestamp")
 		f.SetCellValue("Sheet1", "B1", "Device ID")
 		f.SetCellValue("Sheet1", "C1", "Device Name") // ⚡ Added
-		f.SetCellValue("Sheet1", "D1", "Source")
 		f.SetCellValue("Sheet1", "E1", "Value")
 
 		for i, log := range logs {
 			rowNum := i + 2
-			f.SetCellValue("Sheet1", fmt.Sprintf("A%d", rowNum), log.ReceivedAt.Format("2006-01-02 15:04:05"))
+			f.SetCellValue("Sheet1", fmt.Sprintf("A%d", rowNum), log.ReceivedAt.Format(time.RFC3339))
 			f.SetCellValue("Sheet1", fmt.Sprintf("B%d", rowNum), log.DeviceId)
 			f.SetCellValue("Sheet1", fmt.Sprintf("C%d", rowNum), log.DeviceName) // ⚡ Added
-			f.SetCellValue("Sheet1", fmt.Sprintf("D%d", rowNum), log.Source)
 			f.SetCellValue("Sheet1", fmt.Sprintf("E%d", rowNum), log.ValueData)
 		}
 

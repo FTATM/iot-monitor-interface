@@ -138,10 +138,11 @@ func (r *deviceRepo) Update(ctx context.Context, device *model.Device) error {
 			UPDATE device
 			SET 
 				active = $1,
-				protocol = $3
+				protocol = $3,
+				device_name = $4
 			WHERE device_id = $2
 		`
-	result, err := r.db(ctx).Exec(ctx, query, device.Active, device.DeviceId, device.Protocol)
+	result, err := r.db(ctx).Exec(ctx, query, device.Active, device.DeviceId, device.Protocol, device.DeviceName)
 
 	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		if pgErr.Code == "23505" {
@@ -210,37 +211,6 @@ func (r *deviceRepo) GetByIdChartDeviceData(ctx context.Context, id int) (model.
 		return device, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
 	return device, nil
-}
-
-func (r *deviceRepo) GetDeviceDataLogRange(ctx context.Context, deviceIds []int, fromTime, toTime time.Time, maxPoints int) ([]model.DeviceDataLog, error) {
-	const fname = "GetDeviceDataLogRange"
-	query := `
-		SELECT 
-			device_id, 
-			received_at, 
-			value_data
-		FROM 
-			device_data_log
-		WHERE 
-			device_id = ANY($1::int[]) 
-			AND received_at >= $2 
-			AND received_at <= $3
-		ORDER BY 
-			received_at ASC
-		LIMIT $4;
-	`
-
-	rows, err := r.db(ctx).Query(ctx, query, deviceIds, fromTime, toTime, maxPoints)
-	if err != nil {
-		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
-	}
-
-	logs, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[model.DeviceDataLog])
-	if err != nil {
-		return nil, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
-	}
-
-	return logs, nil
 }
 
 func (r *deviceRepo) CountData(ctx context.Context, deviceIds []int, fromTime, toTime time.Time) (int, error) {

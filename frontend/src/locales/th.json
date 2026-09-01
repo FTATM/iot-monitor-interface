@@ -322,11 +322,12 @@
     "selectTargetDevice": "เลือกอุปกรณ์เป้าหมาย",
     "selectTargetGroup": "เลือกกลุ่มเป้าหมาย",
     "taskCommand": "คำสั่งงาน / การกระทำ",
-    "taskCommandPlaceholder": "เช่น reboot, sync_data",
+    "taskCommandPlaceholder": "เช่น reboot, 0, 1",
     "scheduleType": "ประเภทตารางเวลา",
     "oneTimeEvent": "ครั้งเดียว",
     "recurringCron": "เกิดซ้ำ (Cron)",
     "runFrequency": "ความถี่ในการทำงาน",
+    "deleteWarning": "คุณแน่ใจหรือไม่ว่าต้องการลบ?",
     "freq": {
       "min5": "ทุก 5 นาที",
       "min15": "ทุก 15 นาที",
@@ -409,8 +410,8 @@
     "noDevicesInGroup": "ไม่พบอุปกรณ์ในกลุ่มนี้",
     "noSourceRequired": "วิดเจ็ตประเภทนี้ไม่จำเป็นต้องเลือกอุปกรณ์แหล่งข้อมูล",
     "gridPosition": "ตำแหน่งและขนาด",
-    "xCol": "แกน X (คอลัมน์)",
-    "yRow": "แกน Y (แถว)",
+    "xCol": "แกน X",
+    "yRow": "แกน Y",
     "width": "ความกว้าง",
     "height": "ความสูง",
     "saveSettings": "บันทึกการตั้งค่า",
@@ -703,7 +704,7 @@
       "visuals": {
         "line": "กราฟเส้นขนาดเล็ก (Line Sparkline)",
         "bar": "กราฟแท่งขนาดเล็ก (Bar Sparkline)",
-        "icon": "ไอคอนคงที่",
+        "icon": "ไอคอน",
         "none": "ไม่มี (แสดงเฉพาะค่า)"
       },
       "selectIcon": "เลือกไอคอน",

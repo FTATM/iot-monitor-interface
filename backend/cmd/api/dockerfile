@@ -18,7 +18,9 @@ WORKDIR /app
 
 ARG SERVER_PORT
 
-RUN apk --no-cache add ca-certificates
+# Install ca-certificates and tzdata
+RUN apk --no-cache add ca-certificates tzdata
+
 RUN adduser -D nonrootuser
 USER nonrootuser
 

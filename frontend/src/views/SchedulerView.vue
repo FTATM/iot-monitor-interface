@@ -17,7 +17,8 @@
     </div>
 
     <!-- Data Table -->
-    <TableData :data="schedules" :columns="tableColumns" :is-loading="isSchedulesLoading">
+    <TableData :data="schedules" :columns="tableColumns" :is-loading="isSchedulesLoading"
+      :initial-sorting="[{ id: 'status', desc: false }]">
       <template #toolbar-actions>
         <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
           <Icon icon="lucide:plus" class="w-5 h-5 stroke-[3]" />
@@ -86,9 +87,13 @@
       </template>
 
       <template #cell-actions="{ row }">
-        <div class="flex justify-end">
+        <div class="flex justify-end gap-2">
           <button class="btn btn-sm btn-primary" @click="openEditModal(row)">
             <Icon icon="lucide:pencil" class="w-5 h-5" />
+          </button>
+          <button class="btn btn-sm btn-error text-white shadow-sm hover:shadow-md transition-all"
+            @click="openDeleteModal(row)">
+            <Icon icon="lucide:trash-2" class="w-5 h-5" />
           </button>
         </div>
       </template>
@@ -206,7 +211,7 @@
                   <div v-for="device in activeGroupDevices" :key="device.deviceId"
                     class="flex items-center gap-3 p-2 bg-base-100 rounded-lg border border-base-200">
                     <span class="flex-1 text-sm font-semibold truncate" :title="device.deviceName">{{ device.deviceName
-                      }}</span>
+                    }}</span>
 
                     <input type="text" v-model="form.taskActionPayload.deviceOverrides[device.deviceId]"
                       class="input input-bordered input-sm w-32" :placeholder="$t('common.default')" />
@@ -245,7 +250,7 @@
                 <div class="label pb-1">
                   <span class="label-text font-semibold">{{ $t('scheduler.runFrequency') }}</span>
                 </div>
-                <select v-model="cronPreset" class="select select-bordered w-full">
+                <select v-model="cronPreset" @change="handleCronPresetChange" class="select select-bordered w-full">
                   <option value="*/5 * * * *">{{ $t('scheduler.freq.min5') }}</option>
                   <option value="*/15 * * * *">{{ $t('scheduler.freq.min15') }}</option>
                   <option value="0 * * * *">{{ $t('scheduler.freq.hour1') }}</option>
@@ -309,7 +314,7 @@
 
           <div class="px-6 py-4 border-t border-base-200 bg-base-100 flex justify-end gap-3 shrink-0">
             <button type="button" class="btn btn-ghost" @click="closeModal" :disabled="isSaving">{{ $t('common.cancel')
-              }}</button>
+            }}</button>
             <button type="submit" class="btn btn-primary text-white px-8" :disabled="isSaving">
               <span v-if="isSaving" class="loading loading-spinner loading-sm"></span>
               {{ isSaving ? $t('scheduler.saving') : $t('scheduler.saveSchedule') }}
@@ -318,6 +323,27 @@
         </form>
       </div>
       <form method="dialog" class="modal-backdrop" @click="closeModal"><button>close</button></form>
+    </dialog>
+
+    <dialog ref="deleteModal" class="modal z-[200]">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg text-error flex items-center gap-2">
+          <Icon icon="lucide:alert-triangle" class="w-6 h-6" /> {{ $t('common.confirmDelete') || 'Confirm Deletion' }}
+        </h3>
+        <p class="py-4 text-base-content/80">
+          {{ $t('scheduler.deleteWarning') || 'Are you sure you want to delete this schedule? This action cannot be undone.' }}
+        </p>
+        <div class="modal-action">
+          <button type="button" @click="closeDeleteModal" class="btn btn-ghost" :disabled="isDeleting">
+            {{ $t('common.noCancel') || 'Cancel' }}
+          </button>
+          <button type="button" @click="confirmDelete" class="btn btn-error text-white" :disabled="isDeleting">
+            <span v-if="isDeleting" class="loading loading-spinner loading-sm"></span> 
+            {{ $t('common.yesDelete') || 'Delete' }}
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button @click="closeDeleteModal">close</button></form>
     </dialog>
   </div>
   <NoAccess v-else />
@@ -346,6 +372,7 @@ const { t } = useI18n();
 
 const { data: devicesData, error: deviceDataError, execute: fetchDevices } = useFetch();
 const { data: groupsData, error: groupDataError, execute: fetchGroups } = useFetch();
+const { error: deleteError, isLoading: isDeleting, execute: deleteScheduleApi } = useMutation();
 
 const { data: schedulesData, error: schedulesDataError, isLoading: isSchedulesLoading, execute: fetchSchedules } = useFetch();
 const { error: createError, execute: createScheduleApi } = useMutation();
@@ -362,13 +389,27 @@ const modalMode = ref('create');
 const isSaving = ref(false);
 const presetDates = ref([{ label: 'Today', value: new Date() }]);
 const cronPreset = ref('*/5 * * * *');
+const deleteModal = ref(null);
+const scheduleToDelete = ref(null);
 
 const tableColumns = computed(() => [
   { header: t('scheduler.table.target'), id: 'target', enableSorting: false },
   { header: t('scheduler.table.taskAction'), accessorKey: 'taskAction' },
   { header: t('scheduler.table.type'), accessorKey: 'scheduleType' },
   { header: t('scheduler.table.startTime'), accessorKey: 'startTime' },
-  { header: t('common.status'), accessorKey: 'status' },
+  {
+    header: t('common.status'),
+    accessorKey: 'status',
+    sortingFn: (rowA, rowB) => {
+      const priority = { 'active': 1, 'completed': 2, 'cancelled': 3 };
+
+      // Get the weight for each row based on the status string
+      const weightA = priority[rowA.original.status] || 99;
+      const weightB = priority[rowB.original.status] || 99;
+
+      return weightA - weightB;
+    }
+  },
   { header: t('common.actions'), id: 'actions', enableSorting: false, meta: { headerClass: 'text-right', cellClass: 'text-right' } }
 ]);
 
@@ -504,7 +545,7 @@ const openCreateModal = () => {
     status: 'active',
     startTime: null,
     endTime: null,
-    cronExpression: ''
+    cronExpression: '*/5 * * * *'
   };
   cronPreset.value = '*/5 * * * *';
 
@@ -618,11 +659,38 @@ const saveSchedule = async () => {
   isSaving.value = false;
 };
 
-watch(cronPreset, (newValue) => {
-  if (newValue !== 'custom') {
-    form.value.cronExpression = newValue;
+const handleCronPresetChange = () => {
+  if (cronPreset.value !== 'custom') {
+    form.value.cronExpression = cronPreset.value;
   } else {
+    // This will only run if a USER manually clicks "Custom Expression..."
     form.value.cronExpression = '';
   }
-});
+};
+
+// Add these functions near your other modal controls
+const openDeleteModal = (schedule) => {
+  scheduleToDelete.value = schedule;
+  deleteModal.value.showModal();
+};
+
+const closeDeleteModal = () => {
+  deleteModal.value.close();
+  scheduleToDelete.value = null;
+};
+
+// The new function that actually fires when they click "Yes, Delete" inside the modal
+const confirmDelete = async () => {
+  if (!scheduleToDelete.value) return;
+  
+  await deleteScheduleApi(`/schedule/delete/${scheduleToDelete.value.scheduleId}`, null, 'DELETE');
+  
+  if (!deleteError.value) {
+    toast.success(t('common.messages.deleted') || 'Schedule deleted successfully');
+    await loadData();
+    closeDeleteModal();
+  } else {
+    toast.error(deleteError.value?.message || t('common.messages.deleteError') || 'Failed to delete schedule');
+  }
+};
 </script>
