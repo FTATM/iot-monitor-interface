@@ -19,7 +19,7 @@
             <span class="label-text font-semibold">{{ $t('common.unitLabel') }}</span>
           </div>
           <input type="text" v-model="localConfig.unit" class="input input-bordered input-sm w-full"
-            :placeholder="$t('barProcess.config.unitPlaceholder')" />
+            :placeholder="$t('common.unitPlaceholder')" />
         </label>
       </div>
 

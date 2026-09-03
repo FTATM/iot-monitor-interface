@@ -2,7 +2,8 @@
   <div v-if="hasPermission('Role', 'Display')" class="h-full w-full p-6 bg-base-200 overflow-y-auto">
 
     <!-- Page Header Card -->
-    <div class="bg-base-100 shadow-sm rounded-box border border-base-200 p-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div
+      class="bg-base-100 shadow-sm rounded-box border border-base-200 p-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div class="flex items-center gap-4">
         <div class="p-3 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
           <Icon icon="lucide:shield" class="w-7 h-7" />
@@ -15,12 +16,9 @@
     </div>
 
     <!-- Data Table -->
-    <TableData 
-      :data="roleTable" 
-      :columns="tableColumns" 
-      :initial-sorting="[{ id: 'roleId', desc: false }]"
+    <TableData :data="roleTable" :columns="tableColumns" :initial-sorting="[{ id: 'roleId', desc: false }]"
       :is-loading="isLoading">
-      
+
       <template #toolbar-actions>
         <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
           <Icon icon="lucide:plus" class="w-5 h-5 stroke-[3]" />
@@ -32,6 +30,9 @@
         <div class="flex justify-end gap-2">
           <button class="btn btn-sm btn-primary" @click="openEditModal(row)">
             <Icon icon="lucide:pencil" class="w-5 h-5" />
+          </button>
+          <button class="btn btn-sm btn-error text-white" @click="confirmDelete(row)">
+            <Icon icon="lucide:trash-2" class="w-5 h-5" />
           </button>
         </div>
       </template>
@@ -53,18 +54,18 @@
         <form @submit.prevent="submitForm" autocomplete="off" class="p-6 bg-base-100 flex flex-col gap-4">
           <!-- Role Name Input -->
           <label class="form-control w-full">
-            <div class="label pb-1">
-              <span class="label-text font-semibold">{{ $t('common.roleName') }}</span>
-              <span class="label-text-alt text-error">*</span>
+            <div class="label pb-1 flex justify-between">
+              <div>
+                <span class="label-text font-semibold">{{ $t('common.roleName') }}</span>
+                <span class="label-text-alt text-error ml-1">*</span>
+              </div>
+              <!-- Added character counter -->
+              <span class="label-text-alt text-base-content/60 font-mono">{{ form.roleName?.length || 0 }}/31</span>
             </div>
-            <input 
-              type="text" 
-              v-model="form.roleName" 
-              class="input input-bordered w-full"
-              :placeholder="$t('role.roleNamePlaceholder')" 
-              @blur="v$.roleName.$touch()"
-              :class="{ 'input-error': v$.roleName.$error }" 
-            />
+            <!-- Added maxlength="31" -->
+            <input type="text" v-model="form.roleName" maxlength="31" class="input input-bordered w-full"
+              :placeholder="$t('role.roleNamePlaceholder')" @blur="v$.roleName.$touch()"
+              :class="{ 'input-error': v$.roleName.$error }" />
             <div class="label px-1 py-1 h-6">
               <span v-if="v$.roleName.$error" class="label-text-alt text-error font-medium">
                 {{ v$.roleName.$errors[0].$message }}
@@ -80,9 +81,10 @@
           </div>
 
           <div v-else class="flex flex-col gap-4 max-h-64 overflow-y-auto pr-2">
-            <div v-for="menu in menuAvailables" :key="menu.menuId" class="bg-base-200/30 p-3 rounded-lg border border-base-200">
+            <div v-for="menu in menuAvailables" :key="menu.menuId"
+              class="bg-base-200/30 p-3 rounded-lg border border-base-200">
               <div class="flex justify-between items-center mb-3 border-b border-base-300 pb-2">
-                <h4 class="font-extrabold text-base-content text-lg m-0">{{ menu.menuName }}</h4>
+                <h4 class="font-extrabold text-base-content text-lg m-0">{{ getMenuTranslation(menu.menuName) }}</h4>
                 <button type="button" class="btn btn-xs"
                   :class="isAllSelected(menu) ? 'btn-ghost text-error' : 'btn-outline btn-primary'"
                   @click="toggleSelectAll(menu)">
@@ -91,11 +93,13 @@
               </div>
 
               <!-- Flat Actions -->
-              <div v-if="menu.availableActions && menu.availableActions.length > 0" class="flex flex-wrap gap-4 pl-2 mb-2">
-                <label v-for="action in menu.availableActions" :key="action.actionId" class="cursor-pointer label p-0 flex gap-2">
+              <div v-if="menu.availableActions && menu.availableActions.length > 0"
+                class="flex flex-wrap gap-4 pl-2 mb-2">
+                <label v-for="action in menu.availableActions" :key="action.actionId"
+                  class="cursor-pointer label p-0 flex gap-2">
                   <input type="checkbox" class="checkbox checkbox-sm checkbox-primary"
                     :value="`${menu.menuId}-${action.actionId}`" v-model="form.selectedPermissions" />
-                  <span class="label-text font-medium">{{ action.actionName }}</span>
+                  <span class="label-text font-medium">{{ getActionTranslation(action.actionName) }}</span>
                 </label>
               </div>
 
@@ -103,13 +107,14 @@
               <div v-if="menu.submenus && menu.submenus.length > 0" class="flex flex-col gap-3 pl-2 mt-2">
                 <div v-for="sub in menu.submenus" :key="sub.menuId">
                   <h5 class="font-semibold text-xs text-base-content/70 mb-1 border-l-2 border-primary pl-2">
-                    {{ sub.menuName }}
+                    {{ getMenuTranslation(sub.menuName) }}
                   </h5>
                   <div class="flex flex-wrap gap-4 pl-3">
-                    <label v-for="action in sub.availableActions" :key="action.actionId" class="cursor-pointer label p-0 flex gap-2">
+                    <label v-for="action in sub.availableActions" :key="action.actionId"
+                      class="cursor-pointer label p-0 flex gap-2">
                       <input type="checkbox" class="checkbox checkbox-sm checkbox-primary"
                         :value="`${sub.menuId}-${action.actionId}`" v-model="form.selectedPermissions" />
-                      <span class="label-text font-medium">{{ action.actionName }}</span>
+                      <span class="label-text font-medium">{{ getActionTranslation(action.actionName) }}</span>
                     </label>
                   </div>
                 </div>
@@ -134,6 +139,31 @@
         <button>close</button>
       </form>
     </dialog>
+
+    <dialog ref="deleteModal" class="modal modal-bottom sm:modal-middle">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg text-error flex items-center gap-2">
+          <Icon icon="lucide:alert-triangle" class="w-6 h-6" />
+          {{ $t('common.confirmDelete') || 'Confirm Deletion' }}
+        </h3>
+        <p class="py-4">
+          {{ $t('common.deleteWarning') || 'Are you sure you want to delete the role:' }}
+          <span class="font-bold text-base-content">{{ roleToDelete?.roleName }}</span>?
+        </p>
+        <div class="modal-action">
+          <button class="btn btn-ghost" @click="closeDeleteModal" :disabled="isDeleting">
+            {{ $t('common.cancel') }}
+          </button>
+          <button class="btn btn-error text-white px-6" @click="executeDelete" :disabled="isDeleting">
+            <span v-if="isDeleting" class="loading loading-spinner loading-sm"></span>
+            {{ $t('common.delete') || 'Delete' }}
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop" @click="closeDeleteModal">
+        <button>close</button>
+      </form>
+    </dialog>
   </div>
   <NoAccess v-else />
 </template>
@@ -146,18 +176,21 @@ import { toast } from 'vue3-toastify';
 import { useFetch } from '@/composables/useFetch';
 import { useMutation } from '@/composables/useMutation';
 import { useVuelidate } from '@vuelidate/core';
-import { required, helpers } from '@vuelidate/validators';
+import { required, maxLength, helpers } from '@vuelidate/validators';
 
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
 import TableData from '@/components/TableData.vue';
+import { useErrorHandler } from '@/composables/useErrorHandler';
+const { handleError } = useErrorHandler();
 
 const { t } = useI18n();
 
 const { data: roleAllFetch, isLoading, error: roleAllFetchError, execute: roleAllFetchApi } = useFetch();
 const { data: menuAvailableData, isLoading: isLoadingMenuAvailable, execute: menuAvailableFetchApi } = useFetch();
-const { data: roleDetailData, isLoading: isLoadingRole, execute: roleDetailFetchApi } = useFetch();
+const { data: roleDetailData, error: roleDetailDataError,isLoading: isLoadingRole, execute: roleDetailFetchApi } = useFetch();
 const { error: roleUpsertError, execute: roleUpsertApi } = useMutation();
+const { error: roleDeleteError, execute: roleDeleteApi } = useMutation();
 
 const permissionStore = usePermissionStore();
 const { hasPermission } = permissionStore;
@@ -168,6 +201,9 @@ const roleModal = ref(null);
 const isEditing = ref(false);
 const editingRoleId = ref(null);
 const isSaving = ref(false);
+const deleteModal = ref(null);
+const roleToDelete = ref(null);
+const isDeleting = ref(false);
 
 const tableColumns = computed(() => [
   { header: t('common.id'), accessorKey: 'roleId', meta: { headerClass: 'w-16', cellClass: 'font-bold' } },
@@ -180,9 +216,41 @@ const form = ref({
   selectedPermissions: []
 });
 
+const menuTranslationMap = {
+  'Dashboard': 'dashboard',
+  'Canvas': 'canvas',
+  'Canvas Design': 'canvasDesign',
+  'Canvas Access': 'canvasAccess',
+  'Scheduler': 'scheduler',
+  'Log Report': 'logReport',
+  'Notification User': 'notifUser',
+  'Notification Device': 'notifDeviceRule',
+  'User': 'user',
+  'Role': 'role',
+  'Device': 'device',
+  'Device Group': 'deviceGroup'
+};
+
+// Helper function to translate Menu names
+const getMenuTranslation = (rawMenuName) => {
+  const i18nKey = menuTranslationMap[rawMenuName];
+  if (i18nKey) {
+    return t(`menu.${i18nKey}`);
+  }
+  return rawMenuName; // Fallback to raw DB name if not found
+};
+
+// Helper function to translate Action names
+const getActionTranslation = (rawActionName) => {
+  // Convert "Display" to "display" to match the common JSON key
+  const safeKey = rawActionName.toLowerCase();
+  return t(`common.${safeKey}`);
+};
+
 const rules = computed(() => ({
   roleName: {
-    required: helpers.withMessage(t('role.validation.roleNameRequired'), required)
+    required: helpers.withMessage(t('role.validation.roleNameRequired'), required),
+    maxLength: helpers.withMessage(t('common.validation.maxLength', { len: 31 }), maxLength(31))
   }
 }));
 
@@ -259,6 +327,8 @@ const openEditModal = async (role) => {
     const detail = roleDetailData.value.data;
     if (detail.rolePermissions) {
       form.value.selectedPermissions = detail.rolePermissions.map(p => `${p.menuId}-${p.actionId}`);
+    } else {
+      toast.error(roleDetailDataError || t('common.messages.loadError'));
     }
   }
 };
@@ -291,9 +361,41 @@ const submitForm = async () => {
     await loadData();
     closeModal();
   } else {
-    toast.error(roleUpsertError.value.message || t('common.messages.saveError'));
+    toast.error(handleError(roleUpsertError, 'common.messages.saveError'));
   }
 
   isSaving.value = false;
 };
+
+// --- Delete Functionality ---
+const confirmDelete = (role) => {
+  roleToDelete.value = role;
+  deleteModal.value.showModal();
+};
+
+const closeDeleteModal = () => {
+  if (isDeleting.value) return;
+  deleteModal.value.close();
+  roleToDelete.value = null;
+};
+
+const executeDelete = async () => {
+  if (!roleToDelete.value) return;
+
+  isDeleting.value = true;
+
+  // Assuming your backend uses a DELETE method and the ID in the URL
+  await roleDeleteApi(`/role/delete/${roleToDelete.value.roleId}`, null, 'DELETE');
+
+  if (!roleDeleteError.value) {
+    toast.success(t('common.messages.deleted') || 'Role deleted successfully');
+    await loadData(); // Refresh the table
+    closeDeleteModal();
+  } else {
+    toast.error(handleError(roleDeleteError, 'common.messages.deleteFailed', { item: roleToDelete.value.roleName }));
+  }
+
+  isDeleting.value = false;
+};
+
 </script>

@@ -19,8 +19,7 @@
       </div>
 
       <!-- Right side: Data Query Button -->
-      <button @click="openQueryModal"
-        class="btn btn-sm btn-primary backdrop-blur-md shadow-sm hover:border-primary">
+      <button @click="openQueryModal" class="btn btn-sm btn-primary backdrop-blur-md shadow-sm hover:border-primary">
         <Icon icon="lucide:terminal-square" class="w-4 h-4 mr-1" />
         {{ $t('dashboard.dataQuery') }}
       </button>
@@ -30,7 +29,7 @@
     <div class="flex-1 w-full px-6 pb-6 overflow-y-auto">
       <div class="flex-1 min-h-[500px] w-full">
         <GridLayout v-model:layout="activeLayout" :col-num="12" :row-height="30" :is-draggable="false"
-          :is-resizable="false" :vertical-compact="false" >
+          :is-resizable="false" :vertical-compact="false">
           <GridItem v-for="item in activeLayout" :key="item.i" :x="item.x" :y="item.y" :w="item.w" :h="item.h"
             :i="item.i">
             <div
@@ -81,7 +80,8 @@
 
           <!-- Dynamic Results Table -->
           <div class="flex flex-col flex-1 min-h-[300px]">
-            <h4 class="font-bold text-sm text-base-content mb-2 border-b border-base-200 pb-2">{{ $t('dashboard.resultOutput') }}</h4>
+            <h4 class="font-bold text-sm text-base-content mb-2 border-b border-base-200 pb-2">{{
+              $t('dashboard.resultOutput') }}</h4>
 
             <div v-if="queryResults.length > 0"
               class="overflow-x-auto overflow-y-auto border border-base-200 rounded-box max-h-[400px]">
@@ -89,7 +89,7 @@
                 <thead class="bg-base-200/80 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
                     <th v-for="col in queryColumns" :key="col" class="uppercase tracking-wider font-bold text-xs">{{ col
-                      }}</th>
+                    }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -132,12 +132,14 @@ import { ref, onMounted, watch, onUnmounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { GridLayout, GridItem } from 'grid-layout-plus';
 import { useFetch } from '@/composables/useFetch';
-import { useMutation } from '@/composables/useMutation'; 
+import { useMutation } from '@/composables/useMutation';
 import { toast } from 'vue3-toastify';
 import { Icon } from '@iconify/vue';
 import { useLiveStreamStore } from '@/stores/useLiveStreamStore';
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
+import { useErrorHandler } from '@/composables/useErrorHandler';
+const { handleError } = useErrorHandler();
 
 import BarChart from '@/components/widgets/BarChart.vue';
 import BulletChart from '@/components/widgets/BulletChart.vue';
@@ -163,7 +165,7 @@ const widgetMap = {
   'BarChart': BarChart, 'BulletChart': BulletChart, 'AnalogueGauge': AnalogueGauge, 'LineChart': LineChart,
   'PieChart': PieChart, 'ScatterChart': ScatterChart, 'BarProcess': BarProcess, 'Status': Status,
   'Table': Table, 'Alert': Alert, 'Text': Text, 'ScoreCard': ScoreCard, 'RowChart': RowChart,
-  'InputAction': InputAction, 'DigitalGauge': DigitalGauge,'BarLineChart': BarLineChart,'Visualization': Visualization,
+  'InputAction': InputAction, 'DigitalGauge': DigitalGauge, 'BarLineChart': BarLineChart, 'Visualization': Visualization,
 };
 
 const liveStreamStore = useLiveStreamStore();
@@ -183,7 +185,7 @@ const hasQueried = ref(false);
 
 const { data: widgetTypeMasterData, error: widgetTypeMasterError, execute: widgetTypeMasterApi } = useFetch();
 const { data: userAllCanvasFetchData, error: userAllCanvasFetchError, execute: userAllCanvasFetchApi } = useFetch();
-const { data: queryData, error: queryError, isLoading: isQuerying, execute: executeQueryApi } = useMutation(); 
+const { data: queryData, error: queryError, isLoading: isQuerying, execute: executeQueryApi } = useMutation();
 
 const activeCanvasStyle = computed(() => {
   const canvas = allUserCanvasesMap.value.get(activeCanvasId.value);
@@ -232,9 +234,8 @@ const runQuery = async () => {
     }
 
     hasQueried.value = true;
-    // toast.success(t('dashboard.messages.querySuccess'));
   } else {
-    // toast.error(queryError.value?.message || t('dashboard.messages.queryFailed'));
+    toast.error(handleError(queryError, 'dashboard.messages.queryFailed'));
   }
 };
 
@@ -279,7 +280,7 @@ const loadUserCanvas = async () => {
       loadCurrentCanvas();
     }
   } else if (userAllCanvasFetchError.value) {
-    toast.error(t('dashboard.messages.loadCanvasFailed'));
+    toast.error(t('common.messages.loadFailed', { item: "User Canvas" }));
   }
 };
 
@@ -295,7 +296,7 @@ const setupData = async () => {
   if (!widgetTypeMasterError.value && widgetTypeMasterData.value) {
     for (let i of widgetTypeMasterData.value.data) widgetTypeMasterMap.set(i.widgetTypeId, i);
   } else if (widgetTypeMasterError.value) {
-    toast.error(t('dashboard.messages.loadTypesFailed'));
+    toast.error(t('common.messages.loadFailed', { item: "Widget Type" }));
   }
 };
 

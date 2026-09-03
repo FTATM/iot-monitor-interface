@@ -26,7 +26,7 @@
   },
   "common": {
     "id": "รหัส",
-    "actions": "การกระทำ",
+    "actions": "ตัวเลือก",
     "cancel": "ยกเลิก",
     "save": "บันทึกการเปลี่ยนแปลง",
     "create": "สร้าง",
@@ -88,6 +88,7 @@
     "timeRange": "ช่วงเวลา",
     "from": "จากวันที่",
     "to": "ถึงวันที่",
+    "deleteWarning": "คุณแน่ใจหรือไม่ว่าต้องการลบ",
     "timeRanges": {
       "live": "ข้อมูลสดเท่านั้น",
       "m15": "15 นาทีที่ผ่านมา",
@@ -113,6 +114,12 @@
     "enableOverrides": "เปิดใช้งานคำสั่งแยกรายอุปกรณ์",
     "deviceOverridesOptional": "คำสั่งแยกรายอุปกรณ์ (ไม่บังคับ)",
     "noDevicesAssigned": "ปัจจุบันยังไม่มีอุปกรณ์ในกลุ่มนี้",
+    "display": "แสดงผล",
+    "update": "แก้ไขข้อมูล",
+    "query": "สืบค้น",
+    "validation": {
+      "maxLength": "ความยาวสูงสุดไม่เกิน {len} ตัวอักษร"
+    },
     "messages": {
       "createSuccess": "สร้าง{item}สำเร็จ!",
       "updateSuccess": "อัปเดต{item}สำเร็จ!",
@@ -131,7 +138,10 @@
       "loadError": "ไม่สามารถโหลดข้อมูลได้",
       "createError": "ไม่สามารถสร้างได้",
       "updateError": "ไม่สามารถอัปเดตได้",
-      "deleteError": "ไม่สามารถลบได้"
+      "deleteError": "ไม่สามารถลบได้",
+      "duplicateError": "มีข้อมูลซ้ำ {item}",
+      "noAccessError": "ไม่มีสิทธิ์เข้าถึง",
+      "deleteFailedInUsed": "ไม่สามารถลบได้เพราะมีการใช้งานอยู่: {item}"
     }
   },
   "role": {
@@ -190,8 +200,7 @@
     "assignDevicesDesc": "สามารถเลือกได้หลายอุปกรณ์",
     "deleteWarning": "ลบกลุ่ม \"{name}\" หรือไม่? การกระทำนี้จะไม่ลบอุปกรณ์ที่อยู่ในกลุ่ม ลบเพียงการจัดกลุ่มเท่านั้น",
     "validation": {
-      "groupNameRequired": "กรุณาระบุชื่อกลุ่ม",
-      "maxLength": "ความยาวสูงสุดไม่เกิน 31 ตัวอักษร"
+      "groupNameRequired": "กรุณาระบุชื่อกลุ่ม"
     }
   },
   "device": {
@@ -321,7 +330,7 @@
     "targetType": "ประเภทเป้าหมาย",
     "selectTargetDevice": "เลือกอุปกรณ์เป้าหมาย",
     "selectTargetGroup": "เลือกกลุ่มเป้าหมาย",
-    "taskCommand": "คำสั่งงาน / การกระทำ",
+    "taskCommand": "คำสั่งงาน / ค่า",
     "taskCommandPlaceholder": "เช่น reboot, 0, 1",
     "scheduleType": "ประเภทตารางเวลา",
     "oneTimeEvent": "ครั้งเดียว",
@@ -344,9 +353,20 @@
     "selectStartTime": "เลือกวันที่และเวลาเริ่มต้น",
     "saving": "กำลังบันทึก...",
     "saveSchedule": "บันทึกตารางเวลา",
+    "customTime": "กำหนดเวลาเอง",
+    "customTimeHint": "เลือกเวลาและวันที่ต้องการให้ทำงาน",
+    "advancedMode": "โหมด Cron ขั้นสูง",
+    "advanced": "ขั้นสูง",
+    "cronParts": {
+      "minute": "นาที",
+      "hour": "ชั่วโมง",
+      "day": "วัน",
+      "month": "เดือน",
+      "week": "สัปดาห์"
+    },
     "table": {
       "target": "เป้าหมาย",
-      "taskAction": "งาน / การกระทำ",
+      "taskAction": "งาน / คำสั่ง",
       "type": "ประเภท",
       "startTime": "เวลาเริ่มต้น"
     },
@@ -410,8 +430,8 @@
     "noDevicesInGroup": "ไม่พบอุปกรณ์ในกลุ่มนี้",
     "noSourceRequired": "วิดเจ็ตประเภทนี้ไม่จำเป็นต้องเลือกอุปกรณ์แหล่งข้อมูล",
     "gridPosition": "ตำแหน่งและขนาด",
-    "xCol": "แกน X",
-    "yRow": "แกน Y",
+    "xCol": "แกน X (คอลัมน์)",
+    "yRow": "แกน Y (แถว)",
     "width": "ความกว้าง",
     "height": "ความสูง",
     "saveSettings": "บันทึกการตั้งค่า",
@@ -447,6 +467,9 @@
     "deleteCanvas": "ลบแคนวาส",
     "deleteWarning": "คุณแน่ใจหรือไม่ว่าต้องการลบ \"{name}\"?",
     "deleteWarningDesc": "การกระทำนี้ไม่สามารถย้อนกลับได้ และจะลบวิดเจ็ตทั้งหมดที่ตั้งค่าไว้บนแคนวาสนี้",
+    "validation": {
+      "canvasNameRequired": "กรุณาระบุชื่อแคนวาส"
+    },
     "messages": {
       "renameSuccess": "เปลี่ยนชื่อแคนวาสสำเร็จ!"
     }
@@ -476,7 +499,9 @@
   },
   "searchableDropdown": {
     "noResults": "ไม่พบผลลัพธ์สำหรับ \"{query}\"",
-    "searchPlaceholder": "ค้นหา..."
+    "searchPlaceholder": "ค้นหา...",
+    "selectAll": "เลือกทั้งหมด",
+    "clearAll": "ล้างทั้งหมด"
   },
   "tableData": {
     "searchPlaceholder": "ค้นหาทุกคอลัมน์...",
@@ -831,7 +856,9 @@
       "noDevicesWarning": "คำเตือน: คุณต้องเลือกอุปกรณ์อย่างน้อยหนึ่งเครื่องในการตั้งค่าทั่วไปเพื่อดูข้อมูลซ้อนทับ!"
     },
     "messages": {
-      "uploadFailed": "การอัปโหลดรูปภาพล้มเหลว"
+      "uploadFailed": "การอัปโหลดรูปภาพล้มเหลว",
+      "fileTooLarge": "ไฟล์มีขนาดใหญ่เกิน 10 MB.",
+      "fileNotAllowed": "ได้แค่ไฟล์ (PNG, JPG, GIF, WEBP) ถึงอัพโหลดได้"
     }
   }
 }

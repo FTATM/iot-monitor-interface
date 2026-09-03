@@ -50,7 +50,7 @@
             <Icon icon="lucide:pencil" class="w-5 h-5" />
           </button>
           <button @click="openDeleteModal(row)" class="btn btn-sm btn-error text-white">
-            <Icon icon="lucide:trash" class="w-5 h-5" />
+            <Icon icon="lucide:trash-2" class="w-5 h-5" />
           </button>
         </div>
       </template>
@@ -70,7 +70,7 @@
 
         <form @submit.prevent="submitForm" autocomplete="off" class="p-6 bg-base-100">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3">
-            
+
             <label class="form-control w-full sm:col-span-2">
               <div class="label pb-1 flex justify-between">
                 <span class="label-text font-semibold">{{ $t('deviceGroup.groupName') }}</span>
@@ -78,8 +78,8 @@
                   {{ form.groupName?.length || 0 }}/31
                 </span>
               </div>
-              <input type="text" v-model="form.groupName" maxlength="31" :placeholder="$t('deviceGroup.groupNamePlaceholder')"
-                @blur="v$.groupName.$touch()"
+              <input type="text" v-model="form.groupName" maxlength="31"
+                :placeholder="$t('deviceGroup.groupNamePlaceholder')" @blur="v$.groupName.$touch()"
                 :class="['input input-bordered w-full', { 'input-error': v$.groupName.$error }]" />
               <div class="label px-1 py-1 h-6">
                 <span v-if="v$.groupName.$error" class="label-text-alt text-error font-medium">
@@ -172,6 +172,8 @@ import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
 import TableData from '@/components/TableData.vue';
 import SearchableDropdown from '@/components/SearchableDropdown.vue';
+import { useErrorHandler } from '@/composables/useErrorHandler';
+const { handleError } = useErrorHandler();
 
 const { t } = useI18n();
 
@@ -209,13 +211,13 @@ const form = ref({
   groupName: '',
   description: '',
   protocol: 'none', // ⚡ Default to none
-  deviceIds: [] 
+  deviceIds: []
 });
 
 const rules = computed(() => ({
   groupName: {
     required: helpers.withMessage(t('deviceGroup.validation.groupNameRequired'), required),
-    maxLength: helpers.withMessage(t('deviceGroup.validation.maxLength'), maxLength(31))
+    maxLength: helpers.withMessage(t('common.validation.maxLength', { len: 31 }), maxLength(31))
   }
 }));
 const v$ = useVuelidate(rules, form);
@@ -256,7 +258,7 @@ const openEditModal = (group) => {
     groupName: group.groupName,
     description: group.description || '',
     protocol: group.protocol || 'none', // ⚡ Map null to 'none' for UI
-    deviceIds: group.deviceIds || [] 
+    deviceIds: group.deviceIds || []
   };
   v$.value.$reset();
   groupModal.value.showModal();
@@ -274,7 +276,7 @@ const confirmDelete = async () => {
     await loadTable();
     closeDeleteModal();
   } else {
-    toast.error(groupDeletedError.value?.message || t('common.messages.deleteError'));
+    toast.error(handleError(groupDeletedError, 'common.messages.deleteFailed', { item: groupToDelete.value.groupName }));
   }
 };
 
@@ -297,7 +299,7 @@ const submitForm = async () => {
       toast.success(t('common.messages.updated'));
       await loadTable();
     } else {
-      toast.error(groupUpdatedError.value?.message || t('common.messages.updateError'));
+      toast.error(handleError(groupUpdatedError.value?.message, 'common.messages.updateFailed', { item: payload.groupName }));
     }
   } else {
     await groupAddedApi('/device/group/create', payload, 'POST');
@@ -306,7 +308,7 @@ const submitForm = async () => {
       toast.success(t('common.messages.created'));
       await loadTable();
     } else {
-      toast.error(groupAddedError.value?.message || t('common.messages.createError'));
+      toast.error(handleError(groupAddedError.value?.message, 'common.messages.createFailed', { item: payload.groupName }));
     }
   }
 };

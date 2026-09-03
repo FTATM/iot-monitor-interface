@@ -166,7 +166,7 @@ func (r *deviceRepo) Delete(ctx context.Context, deviceId int) error {
 			UPDATE device
 			SET 
 				active = false,
-				deleted_at = CURRENT_TIMESTAMP
+				deleted_at = now()
 			WHERE device_id = $1
 		`
 	result, err := r.db(ctx).Exec(ctx, query, deviceId)

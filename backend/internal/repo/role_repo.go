@@ -281,3 +281,31 @@ func (r *roleRepo) GetPermissionDescByUserId(ctx context.Context, userId int) ([
 
 	return results, nil
 }
+
+func (r *roleRepo) CountUsersByRoleId(ctx context.Context, roleId int) (int, error) {
+	const fname = "CountUsersByRoleId"
+	// Using "user" table name as defined in your existing RolePermission query
+	query := `
+		SELECT COUNT(1) 
+		FROM "user" 
+		WHERE role_id = $1 AND deleted_at IS NULL
+	`
+
+	var count int
+	err := r.db(ctx).QueryRow(ctx, query, roleId).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+	return count, nil
+}
+
+func (r *roleRepo) DeleteRole(ctx context.Context, roleId int) error {
+	const fname = "DeleteRole"
+	query := `DELETE FROM role WHERE role_id = $1`
+
+	_, err := r.db(ctx).Exec(ctx, query, roleId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+	return nil
+}

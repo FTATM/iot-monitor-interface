@@ -8,8 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 const MaxBodyLogSize = 4096 // 4KB Limit

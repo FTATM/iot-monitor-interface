@@ -147,21 +147,22 @@ func (r *deviceGatewayRepo) GetDeviceIdByName(ctx context.Context, deviceName st
 func (r *deviceGatewayRepo) GetDeviceIdByGroupName(ctx context.Context, groupName string) ([]model.DeviceGroupData, error) {
 	const fname = "GetDeviceIdByGroupName"
 	query := `
-        SELECT 
-            dg.group_id,
-            dg.group_name,
-            dg.protocol,
-            array_agg(d.device_name) AS device_name_s
-        FROM device_group dg
-        JOIN device_group_map dgm on dg.group_id = dgm.group_id
-        JOIN device d on dgm.device_id = d.device_id
-        WHERE 
-            dg.group_name = $1 AND
-            (d.active = true AND d.deleted_at IS NULL)
-        GROUP BY 
-            dg.group_id, 
-            dg.group_name, 
-            dg.protocol
+		SELECT 
+    		dg.group_id,
+    		dg.group_name,
+    		COALESCE(dg.protocol::text, '') AS protocol,
+    		COALESCE(array_agg(d.device_id) FILTER (WHERE d.device_id IS NOT NULL), '{}') AS device_id_s
+		FROM device_group dg
+		LEFT JOIN device_group_map dgm on dg.group_id = dgm.group_id
+		LEFT JOIN device d on dgm.device_id = d.device_id 
+    		AND d.active = true 
+    		AND d.deleted_at IS NULL
+		WHERE 
+    		dg.group_name = $1
+		GROUP BY 
+    		dg.group_id, 
+    		dg.group_name, 
+    		dg.protocol
     `
 
 	rows, err := r.pool.Query(ctx, query, groupName)
@@ -216,4 +217,30 @@ func (r *deviceGatewayRepo) GetDeviceGroupNameById(ctx context.Context, groupId 
 	}
 
 	return deviceName, nil
+}
+
+func (r *deviceGatewayRepo) GetDeviceInfoByName(ctx context.Context, deviceName string) (int, string, error) {
+	const fname = "GetDeviceInfoByName"
+
+	var deviceId int
+	var protocol string
+
+	query := `
+		SELECT 
+			device_id,
+			protocol
+		FROM device
+		WHERE 
+			device_name = $1 AND
+			(active = true AND deleted_at IS NULL)
+	`
+
+	// Scan both the ID and the protocol into their respective variables
+	err := r.pool.QueryRow(ctx, query, deviceName).Scan(&deviceId, &protocol)
+
+	if err != nil {
+		return 0, "", fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
+	}
+
+	return deviceId, protocol, nil
 }

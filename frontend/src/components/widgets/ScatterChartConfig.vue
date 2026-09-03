@@ -3,7 +3,7 @@
 
     <div class="p-4 bg-base-200/50 rounded-box border border-base-200">
       <h4 class="font-bold text-sm mb-3 text-base-content">{{ $t('lineChart.config.dataOptions') }}</h4>
-      
+
       <div class="grid grid-cols-2 gap-4 mb-3">
         <label class="form-control w-full">
           <div class="label pb-1"><span class="label-text font-semibold">{{ $t('common.historyRange') }}</span></div>
@@ -19,28 +19,31 @@
             <option value="custom">{{ $t('common.timeRanges.custom') }}</option>
           </select>
         </label>
-        
+
         <label class="form-control w-full">
           <div class="label pb-1"><span class="label-text font-semibold">{{ $t('common.maxDataPoints') }}</span></div>
-          <input type="number" v-model.number="localConfig.maxPoints" class="input input-bordered input-sm w-full" placeholder="100" />
+          <input type="number" v-model.number="localConfig.maxPoints" class="input input-bordered input-sm w-full"
+            placeholder="100" />
         </label>
       </div>
 
-      <div v-if="localConfig.historyRange === 'custom'" class="grid grid-cols-2 gap-4 p-3 mt-2 bg-base-100 rounded-lg border border-base-300">
+      <div v-if="localConfig.historyRange === 'custom'"
+        class="grid grid-cols-2 gap-4 p-3 mt-2 bg-base-100 rounded-lg border border-base-300">
         <label class="form-control w-full">
-          <div class="label pb-1"><span class="label-text font-semibold text-primary">{{ $t('common.from') }}</span></div>
+          <div class="label pb-1"><span class="label-text font-semibold text-primary">{{ $t('common.from') }}</span>
+          </div>
           <VueDatePicker v-model="localConfig.customFrom" :is-24="true" auto-apply :preset-dates="presetDates"
-            format="yyyy-MM-dd HH:mm" teleport-center>
+            :dark="themeStore.isDarkTheme" format="yyyy-MM-dd HH:mm" teleport-center>
             <template #input-icon>
               <Icon icon="lucide:calendar-clock" class="w-5 h-5 ml-3 text-base-content/50" />
             </template>
           </VueDatePicker>
         </label>
-        
+
         <label class="form-control w-full">
           <div class="label pb-1"><span class="label-text font-semibold text-primary">{{ $t('common.to') }}</span></div>
           <VueDatePicker v-model="localConfig.customTo" :is-24="true" auto-apply :preset-dates="presetDates"
-            format="yyyy-MM-dd HH:mm" teleport-center>
+            :dark="themeStore.isDarkTheme" format="yyyy-MM-dd HH:mm" teleport-center>
             <template #input-icon>
               <Icon icon="lucide:calendar-clock" class="w-5 h-5 ml-3 text-base-content/50" />
             </template>
@@ -68,14 +71,16 @@
           <div class="label pb-1">
             <span class="label-text font-semibold">{{ $t('scatterChart.config.xAxisLabel') }}</span>
           </div>
-          <input type="text" v-model="localConfig.xAxisName" class="input input-bordered input-sm w-full" :placeholder="$t('scatterChart.config.timePlaceholder')" />
+          <input type="text" v-model="localConfig.xAxisName" class="input input-bordered input-sm w-full"
+            :placeholder="$t('scatterChart.config.timePlaceholder')" />
         </label>
 
         <label class="form-control w-full">
           <div class="label pb-1">
             <span class="label-text font-semibold">{{ $t('scatterChart.config.yAxisLabel') }}</span>
           </div>
-          <input type="text" v-model="localConfig.yAxisName" class="input input-bordered input-sm w-full" :placeholder="$t('scatterChart.config.valuePlaceholder')" />
+          <input type="text" v-model="localConfig.yAxisName" class="input input-bordered input-sm w-full"
+            :placeholder="$t('scatterChart.config.valuePlaceholder')" />
         </label>
       </div>
     </div>
@@ -84,10 +89,12 @@
       <div class="flex justify-between items-center mb-4">
         <h4 class="font-bold text-sm text-base-content m-0">{{ $t('common.deviceColors') }}</h4>
       </div>
-      
+
       <div class="flex flex-col gap-2">
-        <div v-for="device in activeDevices" :key="device.deviceId" class="flex items-center gap-3 p-2 bg-base-100 border border-base-300 rounded-lg">
-          <input type="color" v-model="localConfig.deviceColors[device.deviceId]" class="h-8 w-12 cursor-pointer rounded border border-base-300 p-0 shrink-0" />
+        <div v-for="device in activeDevices" :key="device.deviceId"
+          class="flex items-center gap-3 p-2 bg-base-100 border border-base-300 rounded-lg">
+          <input type="color" v-model="localConfig.deviceColors[device.deviceId]"
+            class="h-8 w-12 cursor-pointer rounded border border-base-300 p-0 shrink-0" />
           <span class="text-sm font-semibold flex-1">{{ device.deviceName }}</span>
         </div>
         <div v-if="activeDevices.length === 0" class="text-sm text-base-content/50 py-2 text-center">
@@ -103,6 +110,8 @@
 import { ref, watch, onMounted, computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import { VueDatePicker } from '@vuepic/vue-datepicker';
+import { useThemeStore } from '@/stores/useThemeStore';
+const themeStore = useThemeStore();
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
@@ -125,9 +134,9 @@ const defaultColorPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf
 
 const localConfig = ref({
   historyRange: props.modelValue.historyRange || '1h',
-  customFrom: props.modelValue.customFrom || '', 
+  customFrom: props.modelValue.customFrom || '',
   customTo: props.modelValue.customTo || '',
-  maxPoints: props.modelValue.maxPoints || 100, 
+  maxPoints: props.modelValue.maxPoints || 100,
   showRegression: props.modelValue.showRegression !== undefined ? props.modelValue.showRegression : true,
   xAxisName: props.modelValue.xAxisName || '',
   yAxisName: props.modelValue.yAxisName || '',

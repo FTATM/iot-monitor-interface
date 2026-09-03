@@ -221,10 +221,8 @@ func (s *userService) LoginUserJwt(ctx context.Context, creds *model.LoginCreden
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
 		// Permissions: permissionMap,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expTime),
-			IssuedAt:  jwt.NewNumericDate(issueTime),
-		},
+		ExpiresAt: jwt.NewNumericDate(expTime),
+		IssuedAt:  jwt.NewNumericDate(issueTime),
 	}
 
 	// Declare the token with the algorithm used for signing, and the claims

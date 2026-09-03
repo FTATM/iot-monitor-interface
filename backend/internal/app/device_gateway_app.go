@@ -21,12 +21,12 @@ import (
 )
 
 type ServerDeviceGateway struct {
-	dB                   *pgxpool.Pool
-	server               *http.Server
-	gatewayService       model.DeviceGatewayService
-	sessionService       model.SessionManagerService
-	cacheService         model.CacheService
-	startDeviceRuleAlert func()
+	dB             *pgxpool.Pool
+	server         *http.Server
+	gatewayService model.DeviceGatewayService
+	sessionService model.SessionManagerService
+	cacheService   model.CacheService
+	notifiService  model.NotificationService
 }
 
 func (a *ServerDeviceGateway) Run(ctx context.Context) error {
@@ -40,7 +40,8 @@ func (a *ServerDeviceGateway) Run(ctx context.Context) error {
 		slog.Error("Failed to start device gateway service", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	go a.startDeviceRuleAlert()
+
+	go a.notifiService.StartDeviceRuleAlert()
 
 	// ⚡ NEW: Start the cache sweeper in the background
 	a.cacheService.StartSweeper(ctx)
@@ -124,9 +125,22 @@ func InitializeDeviceGateway(ctx context.Context) (App, error) {
 	auditLogRepo := repo.NewAuditLogRepository(db)
 
 	notificationClient := client.NewNotificationClient(
-		config.Sms{},
-		config.Email{},
-		config.Line{},
+		config.Sms{
+			Url:    GetEnvOrDefault("SMS_API_URL", ""),
+			Key:    GetEnvOrDefault("SMS_API_KEY", ""),
+			Secret: GetEnvOrDefault("SMS_API_SECRET", ""),
+			Sender: GetEnvOrDefault("SMS_SENDER", ""),
+		},
+		config.Email{
+			Host:       GetEnvOrDefault("MAIL_HOST", ""),
+			Port:       GetEnvOrDefault("MAIL_PORT", ""),
+			Encryption: GetEnvOrDefault("MAIL_ENCRYPTION", ""),
+			Username:   GetEnvOrDefault("MAIL_USERNAME", ""),
+			Password:   GetEnvOrDefault("MAIL_PASSWORD", ""),
+		},
+		config.Line{
+			Token: GetEnvOrDefault("LINE_NOTIFY_TOKEN", ""),
+		},
 	)
 
 	cacheService := service.NewCacheService(gatewayRepo)
@@ -154,11 +168,11 @@ func InitializeDeviceGateway(ctx context.Context) (App, error) {
 	}
 
 	return &ServerDeviceGateway{
-		dB:                   db,
-		server:               server,
-		gatewayService:       gatewayService,
-		sessionService:       sessionService,
-		cacheService:         cacheService,
-		startDeviceRuleAlert: notificationService.StartDeviceRuleAlert,
+		dB:             db,
+		server:         server,
+		gatewayService: gatewayService,
+		sessionService: sessionService,
+		cacheService:   cacheService,
+		notifiService:  notificationService,
 	}, nil
 }

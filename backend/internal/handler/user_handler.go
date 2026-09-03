@@ -153,7 +153,7 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -217,7 +217,7 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -275,7 +275,7 @@ func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}

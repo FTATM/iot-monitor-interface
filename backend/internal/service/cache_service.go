@@ -13,6 +13,16 @@ import (
 const cacheTTL = 5 * time.Minute
 const cleanupInterval = 10 * time.Minute
 
+type cachedDeviceInfo struct {
+	DeviceId int
+	Protocol string
+}
+
+type cachedGroupInfo struct {
+	DeviceIds []int
+	Protocol  string
+}
+
 type cacheItem struct {
 	data      any
 	expiresAt time.Time
@@ -30,56 +40,68 @@ func NewCacheService(repo model.DeviceGatewayRepository) model.CacheService {
 	}
 }
 
-func (s *cacheService) GetDeviceIdByName(ctx context.Context, deviceName string) (int, error) {
-	// 1. Check Cache
+func (s *cacheService) GetDeviceInfoByName(ctx context.Context, deviceName string) (int, string, error) {
+	// Step 1: Single Cache Lookup
 	if item, ok := s.deviceNameCache.Load(deviceName); ok {
 		cached := item.(cacheItem)
 		if time.Now().Before(cached.expiresAt) {
-			return cached.data.(int), nil // HIT
+			// Extract our struct
+			info := cached.data.(cachedDeviceInfo)
+			return info.DeviceId, info.Protocol, nil // ⚡ HIT
 		}
 		s.deviceNameCache.Delete(deviceName) // EXPIRED
 	}
 
-	// 2. Cache MISS -> Fetch from DB
-	dbId, err := s.repo.GetDeviceIdByName(ctx, deviceName)
+	// Step 2: Single Database Query Fallback
+	dbId, protocol, err := s.repo.GetDeviceInfoByName(ctx, deviceName)
 	if err != nil || dbId <= 0 {
-		return 0, fmt.Errorf("device not found: %w", err)
+		return 0, "", fmt.Errorf("device not found: %w", err)
 	}
 
-	// 3. Store in Cache
+	// Step 3: Store them together in the single map
 	s.deviceNameCache.Store(deviceName, cacheItem{
-		data:      dbId,
+		data: cachedDeviceInfo{
+			DeviceId: dbId,
+			Protocol: protocol,
+		},
 		expiresAt: time.Now().Add(cacheTTL),
 	})
 
-	return dbId, nil
+	return dbId, protocol, nil
 }
 
-func (s *cacheService) GetDeviceNamesByGroupName(ctx context.Context, groupName string) ([]string, error) {
-	// ตรวจสอบใน Cache
+func (s *cacheService) GetGroupInfoByName(ctx context.Context, groupName string) ([]int, string, error) {
+	// Step 1: Check in Cache
 	if item, ok := s.deviceGroupNameCache.Load(groupName); ok {
 		cached := item.(cacheItem)
 		if time.Now().Before(cached.expiresAt) {
-			return cached.data.([]string), nil
+			// Extract our new struct
+			info := cached.data.(cachedGroupInfo)
+			return info.DeviceIds, info.Protocol, nil // ⚡ HIT
 		}
-		s.deviceGroupNameCache.Delete(groupName)
+		s.deviceGroupNameCache.Delete(groupName) // EXPIRED
 	}
 
-	// หากไม่พบ ให้ดึงจาก DB
+	// Step 2: Database Query Fallback
+	// Your repo method already returns the protocol!
 	groupDataList, err := s.repo.GetDeviceIdByGroupName(ctx, groupName)
 	if err != nil || len(groupDataList) == 0 {
-		return nil, fmt.Errorf("group not found or empty")
+		return nil, "", fmt.Errorf("group not found or empty")
 	}
 
-	deviceNames := groupDataList[0].DeviceNames
+	deviceIds := groupDataList[0].DeviceIds
+	protocol := groupDataList[0].Protocol
 
-	// เก็บลง Cache
+	// Step 3: Store them together in the cache
 	s.deviceGroupNameCache.Store(groupName, cacheItem{
-		data:      deviceNames,
-		expiresAt: time.Now().Add(5 * time.Minute), // หรือใช้ cacheTTL ที่คุณกำหนดไว้
+		data: cachedGroupInfo{
+			DeviceIds: deviceIds,
+			Protocol:  protocol,
+		},
+		expiresAt: time.Now().Add(cacheTTL),
 	})
 
-	return deviceNames, nil
+	return deviceIds, protocol, nil
 }
 
 func (s *cacheService) InvalidateDevice(deviceName string) {

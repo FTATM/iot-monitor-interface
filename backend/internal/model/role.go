@@ -40,6 +40,8 @@ type RoleRepository interface {
 	DeleteAllRolePermissions(ctx context.Context, roleId int) error
 	GetPermissionDescByRoleId(ctx context.Context, roleId int) ([]PermissionDesc, error)
 	GetPermissionDescByUserId(ctx context.Context, userId int) ([]PermissionDesc, error)
+	CountUsersByRoleId(ctx context.Context, roleId int) (int, error)
+	DeleteRole(ctx context.Context, roleId int) error
 }
 
 type RoleService interface {
@@ -48,4 +50,5 @@ type RoleService interface {
 	GetAll(ctx context.Context) ([]Role, error)
 	GetMenuActionAvailable(ctx context.Context) ([]MainMenu, error)
 	GetDetailById(ctx context.Context, roleId int) (*RoleDetail, error)
+	DeleteRole(ctx context.Context, roleId int, authUserId int) error
 }

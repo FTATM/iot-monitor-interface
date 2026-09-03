@@ -36,10 +36,10 @@ type DeviceGroupDetail struct {
 }
 
 type DeviceGroupData struct {
-	GroupId     int      `json:"groupId" db:"group_id"`
-	GroupName   string   `json:"groupName" db:"group_name"`
-	Protocol    *string  `json:"protocol" db:"protocol"`
-	DeviceNames []string `json:"deviceNames" db:"device_name_s"`
+	GroupId   int    `json:"groupId" db:"group_id"`
+	GroupName string `json:"groupName" db:"group_name"`
+	Protocol  string `json:"protocol" db:"protocol"`
+	DeviceIds []int  `json:"deviceIds" db:"device_id_s"`
 }
 
 type CreateDeviceGroup struct {

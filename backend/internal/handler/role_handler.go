@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -58,7 +59,7 @@ func (h *RoleHandler) Upsert(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -128,5 +129,65 @@ func (h *RoleHandler) GetDetailById(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res.Data = detail
+	respondJson(w, http.StatusOK, &res)
+}
+
+func (h *RoleHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	var res Response
+
+	// Extract Auth User ID
+	authUserId, ok := r.Context().Value(auth.AuthUserIdKey).(int)
+	if !ok {
+		res.Message = "Can't get userId"
+		respondJson(w, http.StatusInternalServerError, &res)
+		return
+	}
+
+	// Verify Permission
+	acc := &model.Access{
+		UserId:     authUserId,
+		MenuName:   "Role",
+		ActionName: "Delete",
+	}
+
+	hasAccess, err := h.service.Access(r.Context(), acc)
+	if err != nil {
+		res.Message = "Error checking access"
+		slog.ErrorContext(r.Context(), res.Message, slog.String("track", err.Error()))
+		respondJson(w, http.StatusInternalServerError, &res)
+		return
+	}
+
+	if !hasAccess {
+		res.Message = "t_no_access"
+		respondJson(w, http.StatusForbidden, &res)
+		return
+	}
+
+	// Extract Role ID from the URL parameter
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		res.Message = "Invalid role ID"
+		respondJson(w, http.StatusBadRequest, &res)
+		return
+	}
+
+	// Execute Deletion
+	err = h.service.DeleteRole(r.Context(), id, authUserId)
+	if err != nil {
+		// Pass the exact business logic error (e.g., "Cannot delete this role...") to the client
+		if errors.Is(err, model.ErrInUsed) {
+			res.Message = "t_delete_in_used"
+			respondJson(w, http.StatusBadRequest, &res)
+		} else {
+			res.Message = "Error"
+			slog.ErrorContext(r.Context(), res.Message, slog.String("track", err.Error()))
+			respondJson(w, http.StatusInternalServerError, &res)
+		}
+		return
+	}
+
+	res.Message = "Role deleted successfully"
 	respondJson(w, http.StatusOK, &res)
 }

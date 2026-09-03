@@ -51,7 +51,6 @@
               class="font-mono bg-base-200 px-1.5 py-0.5 rounded border border-base-300">{{ value?.command || '-'
               }}</span>
           </span>
-          <!-- ⚡ Uses the new helper function to filter out ghost data in the UI -->
           <span v-if="getActiveOverridesCount(row) > 0"
             class="text-[10px] text-base-content/60 font-bold uppercase tracking-wide">
             {{ $t('common.overridesCount', { count: getActiveOverridesCount(row) }) }}
@@ -72,7 +71,7 @@
       <template #cell-startTime="{ value }">
         <div class="flex items-center gap-2">
           <Icon icon="lucide:clock" class="w-4 h-4 text-base-content/50" />
-          {{ formatDateTimeDisplay(value) }}
+          {{ formatTime(value) }}
         </div>
       </template>
 
@@ -260,26 +259,94 @@
                 </select>
               </label>
 
-              <label v-if="cronPreset === 'custom'" class="form-control w-full sm:col-span-2 mt-2">
-                <div class="label pb-1">
-                  <span class="label-text font-semibold">{{ $t('scheduler.customCron') }}</span>
-                  <span class="label-text-alt text-base-content/60">{{ $t('scheduler.customCronHint') }}</span>
+              <!-- Custom Cron Section with Simple & Advanced Toggle -->
+              <div v-if="cronPreset === 'custom'"
+                class="form-control w-full sm:col-span-2 mt-2 p-3 bg-base-100 rounded-lg border border-base-200 shadow-sm">
+
+                <!-- Header & Toggle -->
+                <div class="flex justify-between items-center mb-4">
+                  <div>
+                    <span class="label-text font-semibold">{{ $t('scheduler.customTime') }}</span>
+                    <div class="text-xs text-base-content/60">
+                      {{ isAdvancedCron ? $t('scheduler.advancedMode') : $t('scheduler.customTimeHint') }}
+                    </div>
+                  </div>
+                  <label class="cursor-pointer label flex gap-2 p-0">
+                    <span class="label-text text-xs font-bold text-base-content/70">{{ $t('scheduler.advanced')
+                    }}</span>
+                    <input type="checkbox" class="toggle toggle-primary toggle-sm" v-model="isAdvancedCron"
+                      @change="handleAdvancedToggle" />
+                  </label>
                 </div>
-                <input type="text" v-model="form.cronExpression" @blur="v$.cronExpression.$touch()"
-                  :class="['input input-bordered w-full input-sm', { 'input-error': v$.cronExpression.$error }]"
-                  placeholder="* * * * *" />
-                <div class="label px-1 py-0 h-5">
+
+                <!-- SIMPLE MODE: Time Picker & Days -->
+                <div v-if="!isAdvancedCron" class="flex flex-col gap-3">
+                  <VueDatePicker v-model="customTime" time-picker :dark="themeStore.isDarkTheme"
+                    placeholder="Select Time" teleport-center @update:model-value="handleTimeChange"
+                    @closed="v$.cronExpression.$touch()">
+                    <template #input-icon>
+                      <Icon icon="lucide:clock" class="w-5 h-5 ml-3 text-base-content/50" />
+                    </template>
+                  </VueDatePicker>
+
+                  <div>
+                    <div class="flex flex-wrap gap-2">
+                      <button v-for="day in weekDays" :key="day.value" type="button" class="btn btn-sm"
+                        :class="customDays.includes(day.value) ? 'btn-primary text-white border-primary' : 'btn-outline border-base-content/20 text-base-content/70'"
+                        @click="toggleDay(day.value)">
+                        {{ day.label }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ADVANCED MODE: 5-Input Grid -->
+                <div v-else class="flex gap-2 w-full">
+                  <label class="form-control flex-1">
+                    <div class="label pb-1 px-1"><span class="label-text text-[10px] font-bold">{{
+                      $t('scheduler.cronParts.minute') }}</span></div>
+                    <input type="text" v-model="cronParts.minute" @input="updateFromCronParts"
+                      class="input input-sm input-bordered w-full text-center font-mono" />
+                  </label>
+                  <label class="form-control flex-1">
+                    <div class="label pb-1 px-1"><span class="label-text text-[10px] font-bold">{{
+                      $t('scheduler.cronParts.hour') }}</span></div>
+                    <input type="text" v-model="cronParts.hour" @input="updateFromCronParts"
+                      class="input input-sm input-bordered w-full text-center font-mono" />
+                  </label>
+                  <label class="form-control flex-1">
+                    <div class="label pb-1 px-1"><span class="label-text text-[10px] font-bold">{{
+                      $t('scheduler.cronParts.day') }}</span></div>
+                    <input type="text" v-model="cronParts.day" @input="updateFromCronParts"
+                      class="input input-sm input-bordered w-full text-center font-mono" />
+                  </label>
+                  <label class="form-control flex-1">
+                    <div class="label pb-1 px-1"><span class="label-text text-[10px] font-bold">{{
+                      $t('scheduler.cronParts.month') }}</span></div>
+                    <input type="text" v-model="cronParts.month" @input="updateFromCronParts"
+                      class="input input-sm input-bordered w-full text-center font-mono" />
+                  </label>
+                  <label class="form-control flex-1">
+                    <div class="label pb-1 px-1"><span class="label-text text-[10px] font-bold">{{
+                      $t('scheduler.cronParts.week') }}</span></div>
+                    <input type="text" v-model="cronParts.week" @input="updateFromCronParts"
+                      class="input input-sm input-bordered w-full text-center font-mono" />
+                  </label>
+                </div>
+
+                <div class="label px-1 py-0 mt-1 h-5">
                   <span v-if="v$.cronExpression.$error" class="label-text-alt text-error font-medium">{{
                     v$.cronExpression.$errors[0].$message }}</span>
                 </div>
-              </label>
+              </div>
 
               <label class="form-control w-full sm:col-span-2 mt-2">
                 <div class="label pb-1">
                   <span class="label-text font-semibold">{{ $t('scheduler.endTime') }}</span>
                 </div>
                 <VueDatePicker v-model="form.endTime" :is-24="true" auto-apply :preset-dates="presetDates"
-                  format="yyyy-MM-dd HH:mm" :placeholder="$t('scheduler.selectEndTime')" teleport-center>
+                  :dark="themeStore.isDarkTheme" format="yyyy-MM-dd HH:mm" :placeholder="$t('scheduler.selectEndTime')"
+                  teleport-center>
                   <template #input-icon>
                     <Icon icon="lucide:calendar-clock" class="w-5 h-5 ml-3 text-base-content/50" />
                   </template>
@@ -292,8 +359,8 @@
                 <span class="label-text font-semibold">{{ $t('scheduler.startTime') }}</span>
               </div>
               <VueDatePicker v-model="form.startTime" :is-24="true" auto-apply :preset-dates="presetDates"
-                format="yyyy-MM-dd HH:mm" :placeholder="$t('scheduler.selectStartTime')" teleport-center
-                @closed="v$.startTime.$touch()" />
+                :dark="themeStore.isDarkTheme" format="yyyy-MM-dd HH:mm" :placeholder="$t('scheduler.selectStartTime')"
+                teleport-center @closed="v$.startTime.$touch()" />
               <div class="label px-1 py-0 h-5">
                 <span v-if="v$.startTime.$error" class="label-text-alt text-error font-medium">{{
                   v$.startTime.$errors[0].$message }}</span>
@@ -331,14 +398,15 @@
           <Icon icon="lucide:alert-triangle" class="w-6 h-6" /> {{ $t('common.confirmDelete') || 'Confirm Deletion' }}
         </h3>
         <p class="py-4 text-base-content/80">
-          {{ $t('scheduler.deleteWarning') || 'Are you sure you want to delete this schedule? This action cannot be undone.' }}
+          {{ $t('scheduler.deleteWarning')
+            || 'Are you sure you want to delete this schedule? This action cannot be undone.' }}
         </p>
         <div class="modal-action">
           <button type="button" @click="closeDeleteModal" class="btn btn-ghost" :disabled="isDeleting">
             {{ $t('common.noCancel') || 'Cancel' }}
           </button>
           <button type="button" @click="confirmDelete" class="btn btn-error text-white" :disabled="isDeleting">
-            <span v-if="isDeleting" class="loading loading-spinner loading-sm"></span> 
+            <span v-if="isDeleting" class="loading loading-spinner loading-sm"></span>
             {{ $t('common.yesDelete') || 'Delete' }}
           </button>
         </div>
@@ -350,14 +418,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Icon } from '@iconify/vue';
 import { toast } from 'vue3-toastify';
 import { useFetch } from '@/composables/useFetch';
 import { useMutation } from '@/composables/useMutation';
 
-// ⚡ IMPORT VUELIDATE
 import { useVuelidate } from '@vuelidate/core';
 import { required, requiredIf, helpers } from '@vuelidate/validators';
 
@@ -365,9 +432,14 @@ import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
 import SearchableDropdown from '@/components/SearchableDropdown.vue';
 import TableData from '@/components/TableData.vue';
-
+import { useErrorHandler } from '@/composables/useErrorHandler';
+const { handleError } = useErrorHandler();
+import { useFormatter } from '@/composables/useFormatter';
+const { formatTime } = useFormatter();
 import { VueDatePicker } from '@vuepic/vue-datepicker';
+import { useThemeStore } from '@/stores/useThemeStore';
 
+const themeStore = useThemeStore();
 const { t } = useI18n();
 
 const { data: devicesData, error: deviceDataError, execute: fetchDevices } = useFetch();
@@ -392,6 +464,22 @@ const cronPreset = ref('*/5 * * * *');
 const deleteModal = ref(null);
 const scheduleToDelete = ref(null);
 
+// --- Custom Cron State ---
+const customTime = ref({ hours: 12, minutes: 0 });
+const customDays = ref([]);
+const isAdvancedCron = ref(false);
+const cronParts = ref({ minute: '*', hour: '*', day: '*', month: '*', week: '*' });
+
+const weekDays = [
+  { label: 'Sun', value: '0' },
+  { label: 'Mon', value: '1' },
+  { label: 'Tue', value: '2' },
+  { label: 'Wed', value: '3' },
+  { label: 'Thu', value: '4' },
+  { label: 'Fri', value: '5' },
+  { label: 'Sat', value: '6' }
+];
+
 const tableColumns = computed(() => [
   { header: t('scheduler.table.target'), id: 'target', enableSorting: false },
   { header: t('scheduler.table.taskAction'), accessorKey: 'taskAction' },
@@ -402,11 +490,8 @@ const tableColumns = computed(() => [
     accessorKey: 'status',
     sortingFn: (rowA, rowB) => {
       const priority = { 'active': 1, 'completed': 2, 'cancelled': 3 };
-
-      // Get the weight for each row based on the status string
       const weightA = priority[rowA.original.status] || 99;
       const weightB = priority[rowB.original.status] || 99;
-
       return weightA - weightB;
     }
   },
@@ -430,7 +515,55 @@ const form = ref({
   cronExpression: '*/5 * * * *'
 });
 
-// ⚡ VUELIDATE RULES
+// --- Custom Cron Generators ---
+const updateCustomCronString = () => {
+  const mins = customTime.value.minutes;
+  const hrs = customTime.value.hours;
+  const days = customDays.value.length > 0 ? customDays.value.join(',') : '*';
+  form.value.cronExpression = `${mins} ${hrs} * * ${days}`;
+};
+
+const handleTimeChange = (timeObj) => {
+  if (timeObj) {
+    customTime.value = timeObj;
+    updateCustomCronString();
+  }
+};
+
+const toggleDay = (dayValue) => {
+  const index = customDays.value.indexOf(dayValue);
+  if (index === -1) {
+    customDays.value.push(dayValue);
+  } else {
+    customDays.value.splice(index, 1);
+  }
+  customDays.value.sort();
+  updateCustomCronString();
+};
+
+const updateFromCronParts = () => {
+  form.value.cronExpression = `${cronParts.value.minute} ${cronParts.value.hour} ${cronParts.value.day} ${cronParts.value.month} ${cronParts.value.week}`;
+};
+
+const parseIntoCronParts = (cronStr) => {
+  const parts = (cronStr || '* * * * *').split(' ');
+  cronParts.value = {
+    minute: parts[0] || '*',
+    hour: parts[1] || '*',
+    day: parts[2] || '*',
+    month: parts[3] || '*',
+    week: parts[4] || '*'
+  };
+};
+
+const handleAdvancedToggle = () => {
+  if (isAdvancedCron.value) {
+    parseIntoCronParts(form.value.cronExpression);
+  } else {
+    updateCustomCronString();
+  }
+};
+
 const rules = computed(() => ({
   deviceId: {
     requiredIfDevice: helpers.withMessage(t('scheduler.validation.selectDevice'), requiredIf(() => form.value.targetType === 'device'))
@@ -475,15 +608,15 @@ onMounted(async () => {
 
 const loadData = async () => {
   await fetchDevices('/device/getalldetail');
-  if (deviceDataError.value) toast.error(deviceDataError.value.message || t('common.messages.loadError'));
+  if (deviceDataError.value) toast.error(deviceDataError.value.message || t('common.messages.loadFailed', { item: "device" }));
   if (devicesData.value?.data) devices.value = devicesData.value.data;
 
   await fetchGroups('/device/group/getalldetail');
-  if (groupDataError.value) toast.error(groupDataError.value.message || t('common.messages.loadError'));
+  if (groupDataError.value) toast.error(groupDataError.value.message || t('common.messages.loadFailed'), { item: "group device" });
   if (groupsData.value?.data) groups.value = groupsData.value.data;
 
   await fetchSchedules('/schedule/getalldetail');
-  if (schedulesDataError.value) toast.error(schedulesDataError.value.message || t('common.messages.loadError'));
+  if (schedulesDataError.value) toast.error(schedulesDataError.value.message || t('common.messages.loadFailed', { item: "schedule" }));
   if (schedulesData.value?.data) schedules.value = schedulesData.value.data;
 };
 
@@ -503,7 +636,6 @@ const getActiveOverridesCount = (row) => {
   const group = groups.value.find(g => g.groupId === row.deviceGroupId);
   let activeIds = [];
 
-  // Extract the current valid device IDs for this group
   if (group && group.devices) {
     activeIds = group.devices.map(d => Number(d.deviceId));
   } else if (group && group.deviceIds) {
@@ -512,7 +644,6 @@ const getActiveOverridesCount = (row) => {
     activeIds = devices.value.filter(d => d.deviceGroupId === row.deviceGroupId).map(d => Number(d.deviceId));
   }
 
-  // Count how many keys in the JSON actually exist in the activeIds array
   let count = 0;
   for (const idStr of Object.keys(row.taskAction.deviceOverrides)) {
     if (activeIds.includes(Number(idStr))) {
@@ -521,15 +652,6 @@ const getActiveOverridesCount = (row) => {
   }
 
   return count;
-};
-
-const formatDateTimeDisplay = (isoString) => {
-  if (!isoString) return '';
-  const date = new Date(isoString);
-  return date.toLocaleString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
 };
 
 const openCreateModal = () => {
@@ -545,11 +667,15 @@ const openCreateModal = () => {
     status: 'active',
     startTime: null,
     endTime: null,
-    cronExpression: '*/5 * * * *'
+    cronExpression: '*/5 * * * *',
   };
   cronPreset.value = '*/5 * * * *';
+  customTime.value = { hours: 12, minutes: 0 };
+  customDays.value = [];
+  isAdvancedCron.value = false;
+  cronParts.value = { minute: '*', hour: '*', day: '*', month: '*', week: '*' };
 
-  v$.value.$reset(); // ⚡ Reset validation state
+  v$.value.$reset();
   isModalOpen.value = true;
 };
 
@@ -593,12 +719,39 @@ const openEditModal = (schedule) => {
   }
 
   if (form.value.scheduleType === 'recurring') {
-    cronPreset.value = ['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *', '0 8 * * *'].includes(form.value.cronExpression)
-      ? form.value.cronExpression
-      : 'custom';
+    const standardPresets = ['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *', '0 8 * * *'];
+
+    if (standardPresets.includes(form.value.cronExpression)) {
+      cronPreset.value = form.value.cronExpression;
+    } else {
+      cronPreset.value = 'custom';
+      const parts = form.value.cronExpression.split(' ');
+
+      parseIntoCronParts(form.value.cronExpression);
+
+      if (parts.length >= 5) {
+        const isComplex = parts[2] !== '*' || parts[3] !== '*' || parts[0].includes('/') || parts[1].includes('/') || parts[0].includes(',');
+
+        if (isComplex) {
+          isAdvancedCron.value = true;
+        } else {
+          isAdvancedCron.value = false;
+          customTime.value = {
+            minutes: parseInt(parts[0], 10) || 0,
+            hours: parseInt(parts[1], 10) || 0
+          };
+
+          if (parts[4] !== '*' && parts[4] !== '?') {
+            customDays.value = parts[4].split(',');
+          } else {
+            customDays.value = [];
+          }
+        }
+      }
+    }
   }
 
-  v$.value.$reset(); // ⚡ Reset validation state
+  v$.value.$reset();
   isModalOpen.value = true;
 };
 
@@ -607,7 +760,6 @@ const closeModal = () => {
 };
 
 const saveSchedule = async () => {
-  // ⚡ Execute Vuelidate check instead of manual if/else blocks
   const isFormValid = await v$.value.$validate();
   if (!isFormValid) return;
 
@@ -641,7 +793,7 @@ const saveSchedule = async () => {
       await loadData();
       closeModal();
     } else {
-      toast.error(createError.value.message || t('common.messages.createError'));
+      toast.error(handleError(createError, 'common.messages.createError'));
     }
   } else {
     payload.scheduleId = form.value.scheduleId;
@@ -652,7 +804,7 @@ const saveSchedule = async () => {
       await loadData();
       closeModal();
     } else {
-      toast.error(updateError.value.message || t('common.messages.updateError'));
+      toast.error(handleError(updateError, 'common.messages.updateError'));
     }
   }
 
@@ -663,12 +815,14 @@ const handleCronPresetChange = () => {
   if (cronPreset.value !== 'custom') {
     form.value.cronExpression = cronPreset.value;
   } else {
-    // This will only run if a USER manually clicks "Custom Expression..."
-    form.value.cronExpression = '';
+    if (isAdvancedCron.value) {
+      updateFromCronParts();
+    } else {
+      updateCustomCronString();
+    }
   }
 };
 
-// Add these functions near your other modal controls
 const openDeleteModal = (schedule) => {
   scheduleToDelete.value = schedule;
   deleteModal.value.showModal();
@@ -679,18 +833,17 @@ const closeDeleteModal = () => {
   scheduleToDelete.value = null;
 };
 
-// The new function that actually fires when they click "Yes, Delete" inside the modal
 const confirmDelete = async () => {
   if (!scheduleToDelete.value) return;
-  
+
   await deleteScheduleApi(`/schedule/delete/${scheduleToDelete.value.scheduleId}`, null, 'DELETE');
-  
+
   if (!deleteError.value) {
     toast.success(t('common.messages.deleted') || 'Schedule deleted successfully');
     await loadData();
     closeDeleteModal();
   } else {
-    toast.error(deleteError.value?.message || t('common.messages.deleteError') || 'Failed to delete schedule');
+    toast.error(handleError(deleteError, 'common.messages.deleteError'));
   }
 };
 </script>

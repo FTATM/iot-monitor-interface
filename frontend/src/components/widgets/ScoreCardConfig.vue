@@ -72,7 +72,7 @@
 
       <div class="grid grid-cols-2 gap-4">
         <label class="form-control w-full">
-          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('scoreCard.config.timeframe') }}</span></div>
+          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('common.timeRange') }}</span></div>
           <select v-model="localConfig.historyRange" class="select select-bordered select-sm w-full">
             <option value="15m">{{ $t('common.timeRanges.m15') }}</option>
             <option value="1h">{{ $t('common.timeRanges.h1') }}</option>

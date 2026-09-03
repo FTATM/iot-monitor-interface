@@ -169,6 +169,8 @@ import { useMutation } from '@/composables/useMutation';
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
 import TableData from '@/components/TableData.vue';
+import { useErrorHandler } from '@/composables/useErrorHandler';
+const { handleError } = useErrorHandler();
 
 const { t } = useI18n();
 
@@ -245,7 +247,7 @@ const submitForm = async () => {
     closeModal();
     await loadData();
   } else {
-    toast.error(saveError.value?.message || t('common.messages.updateError'));
+    toast.error(handleError(saveError , 'common.messages.saveError'));
   }
 };
 

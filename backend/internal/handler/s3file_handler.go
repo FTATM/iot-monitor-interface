@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
+	"uuid"
 
 	"github.com/FTATM/iot-monitor-interface/config"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsS3Config "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/google/uuid"
 )
 
 type S3File struct {
@@ -21,6 +20,13 @@ type S3File struct {
 	accessKey   string
 	secretKey   string
 	imageBucket string
+}
+
+var allowedImageTypes = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/gif":  ".gif",
+	"image/webp": ".webp",
 }
 
 func NewS3FileHandler(s3Config config.S3) *S3File {
@@ -35,39 +41,68 @@ func NewS3FileHandler(s3Config config.S3) *S3File {
 
 func (h *S3File) UploadImageHandler(w http.ResponseWriter, r *http.Request) {
 	var res Response
-	cfg, err := awsS3Config.LoadDefaultConfig(context.TODO(),
-		awsS3Config.WithRegion(h.region),
-		awsS3Config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(h.accessKey, h.secretKey, "")),
-	)
 
-	// 2. Create the S3 client, overriding the endpoint and forcing Path-Style
-	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		// ⚡ USE THE DOCKER SERVICE NAME, NOT LOCALHOST
-		o.BaseEndpoint = aws.String(h.url)
-		// o.BaseEndpoint = aws.String("http://garage:3900")
-		o.UsePathStyle = true
-	})
+	// 1. Limit max body size (e.g., 10MB) to protect against memory exhaustion
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
 
-	// 3. Get the file from Vue
-	file, header, err := r.FormFile("image")
+	// 2. Parse form file
+	file, _, err := r.FormFile("image")
 	if err != nil {
-		res.Message = "Failed to read image"
-		respondJson(w, http.StatusInternalServerError, &res)
+		res.Message = "Invalid file or file size exceeds 5MB"
+		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
 	defer file.Close()
 
-	ext := filepath.Ext(header.Filename)
-	newFileName := uuid.New().String() + ext
+	// 3. Read the first 512 bytes to sniff actual file content
+	buffer := make([]byte, 512)
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		res.Message = "Failed to inspect file"
+		respondJson(w, http.StatusInternalServerError, &res)
+		return
+	}
 
-	// 4. Push to Garage
-	bucketName := h.imageBucket
+	// 4. Detect true MIME type from file header magic bytes
+	detectedType := http.DetectContentType(buffer[:n])
+	safeExt, ok := allowedImageTypes[detectedType]
+	if !ok {
+		res.Message = "Only image files (PNG, JPG, GIF, WEBP) are allowed"
+		respondJson(w, http.StatusBadRequest, &res)
+		return
+	}
+
+	// 5. Seek back to start so S3 reads the complete file
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		res.Message = "Failed to process image stream"
+		respondJson(w, http.StatusInternalServerError, &res)
+		return
+	}
+
+	// 6. Use the verified extension rather than trusting the raw filename
+	newFileName := uuid.New().String() + safeExt
+
+	// 7. Push to Garage
+	cfg, err := awsS3Config.LoadDefaultConfig(context.TODO(),
+		awsS3Config.WithRegion(h.region),
+		awsS3Config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(h.accessKey, h.secretKey, "")),
+	)
+	if err != nil {
+		res.Message = "S3 config error"
+		respondJson(w, http.StatusInternalServerError, &res)
+		return
+	}
+
+	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(h.url)
+		o.UsePathStyle = true
+	})
 
 	_, err = s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket:      aws.String(bucketName),
+		Bucket:      aws.String(h.imageBucket),
 		Key:         aws.String(newFileName),
 		Body:        file,
-		ContentType: aws.String(header.Header.Get("Content-Type")),
+		ContentType: aws.String(detectedType), // Use detected MIME type
 	})
 
 	if err != nil {
@@ -77,7 +112,6 @@ func (h *S3File) UploadImageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	publicUrl := fmt.Sprintf("/file/image/%s", newFileName)
-
 	res.Data = map[string]any{
 		"url": publicUrl,
 	}

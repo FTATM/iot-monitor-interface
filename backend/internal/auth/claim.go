@@ -7,6 +7,5 @@ type Claim struct {
 	Username  string `json:"username"`
 	FirstName string `json:"firstName"`
 	LastName  string `json:"lastName"`
-	// Permissions map[string][]string `json:"permissions"`
 	jwt.RegisteredClaims
 }

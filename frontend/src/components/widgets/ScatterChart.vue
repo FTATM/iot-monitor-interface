@@ -2,23 +2,27 @@
   <div class="flex flex-col h-full w-full p-4 overflow-hidden" :style="backgroundStyle">
 
     <div class="backdrop-blur-md px-4 py-3 shadow-sm z-10 flex justify-between items-center rounded-lg">
-      <h3 class="m-0 text-base font-extrabold tracking-wide" :style="{ color: widgetData.widgetStyle?.textHex || '#334155' }">
+      <h3 class="m-0 text-base font-extrabold tracking-wide"
+        :style="{ color: widgetData.widgetStyle?.textHex || '#334155' }">
         {{ widgetData?.widgetLabel || $t('scatterChart.newChart') }}
       </h3>
     </div>
 
     <div class="flex-1 w-full min-h-0 relative flex flex-col justify-center mt-2">
 
-      <div v-if="!hasDevices" class="absolute inset-0 flex items-center justify-center text-sm italic text-center p-4" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
+      <div v-if="!hasDevices" class="absolute inset-0 flex items-center justify-center text-sm italic text-center p-4"
+        :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
         {{ $t('common.noDevicesConfig') }}
       </div>
 
-      <div v-else-if="isLoadingHistory" class="absolute inset-0 flex flex-col items-center justify-center text-sm gap-3" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
+      <div v-else-if="isLoadingHistory" class="absolute inset-0 flex flex-col items-center justify-center text-sm gap-3"
+        :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
         <span class="loading loading-spinner loading-md text-primary"></span>
         {{ $t('common.fetchingHistory') }}
       </div>
 
-      <div v-else-if="!hasData" class="absolute inset-0 flex flex-col items-center justify-center text-sm gap-3" :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
+      <div v-else-if="!hasData" class="absolute inset-0 flex flex-col items-center justify-center text-sm gap-3"
+        :style="{ color: widgetData.widgetStyle?.textHex || '#64748b' }">
         <span class="loading loading-spinner loading-md text-primary"></span>
         {{ $t('common.waitingData') }}
       </div>
@@ -39,6 +43,8 @@ import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { ScatterChart, LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
+import { useFormatter } from '@/composables/useFormatter';
+const { formatTime } = useFormatter();
 
 use([CanvasRenderer, ScatterChart, LineChart, GridComponent, TooltipComponent, LegendComponent]);
 
@@ -51,27 +57,27 @@ const props = defineProps({
 const isReady = ref(false);
 const isLoadingHistory = ref(false);
 const liveStreamStore = useLiveStreamStore();
-const { data: historyData, error : historyError, execute: fetchHistoryApi } = useFetch();
-const deviceSeries = ref({}); 
+const { data: historyData, error: historyError, execute: fetchHistoryApi } = useFetch();
+const deviceSeries = ref({});
 
 const backgroundStyle = computed(() => {
   const colorObj = props.widgetData.widgetStyle || {};
   const c1 = colorObj.bgHex || '#ffffff';
   if (!colorObj.useGradient) return { backgroundColor: c1 };
-  const c2 = colorObj.bgHex2 || c1; 
+  const c2 = colorObj.bgHex2 || c1;
   const angle = colorObj.bgGradientDir || '135deg';
   return { background: `linear-gradient(${angle}, ${c1}, ${c2})` };
 });
 
 const hasDevices = computed(() => props.widgetData?.deviceIds && props.widgetData.deviceIds.length > 0);
-const hasData = computed(() => Object.keys(deviceSeries.value).length > 0 );
+const hasData = computed(() => Object.keys(deviceSeries.value).length > 0);
 
 const config = computed(() => {
   const customData = props.widgetData?.customChartData || {};
   return {
     historyRange: customData.historyRange || '1h',
-    customFrom: customData.customFrom || '', 
-    customTo: customData.customTo || '',     
+    customFrom: customData.customFrom || '',
+    customTo: customData.customTo || '',
     maxPoints: customData.maxPoints || 100,
     showRegression: customData.showRegression !== undefined ? customData.showRegression : true,
     use24HourFormat: customData.use24HourFormat !== undefined ? customData.use24HourFormat : true,
@@ -170,19 +176,19 @@ watch(() => liveStreamStore.liveData, (newData) => {
 }, { deep: true });
 
 watch(() => props.widgetData?.deviceIds, (newIds, oldIds) => {
-  if (JSON.stringify(newIds) === JSON.stringify(oldIds)) return; 
-  deviceSeries.value = {}; 
+  if (JSON.stringify(newIds) === JSON.stringify(oldIds)) return;
+  deviceSeries.value = {};
   initializeHistory();
 }, { deep: false });
 
 watch(
-  () => [config.value.historyRange, config.value.maxPoints, config.value.customFrom, config.value.customTo], 
+  () => [config.value.historyRange, config.value.maxPoints, config.value.customFrom, config.value.customTo],
   (newVals, oldVals) => {
     if (JSON.stringify(newVals) === JSON.stringify(oldVals)) return;
     if (newVals[0] === 'custom' && (!newVals[2] || !newVals[3])) return;
-    deviceSeries.value = {}; 
+    deviceSeries.value = {};
     initializeHistory();
-  }, 
+  },
   { deep: true }
 );
 
@@ -224,12 +230,9 @@ const chartOption = computed(() => {
     tooltip: {
       trigger: 'item',
       formatter: (params) => {
-        const timeStr = new Date(params.value[0]).toLocaleTimeString(undefined, {
-          hour12: !config.value.use24HourFormat,
-          hour: '2-digit', minute: '2-digit', second: '2-digit'
-        });
+        const timeStr = formatTime(params.value[0]);
         const yValue = params.value[1] !== undefined && params.value[1] !== null ? params.value[1].toFixed(2) : '-';
-        return `<strong>${params.seriesName}</strong><br/>${t('scatterChart.time')}: ${timeStr}<br/>${t('scatterChart.value')}: <span style="color:${chartTextColor}">${yValue}</span>`;
+        return `<strong>${params.seriesName}</strong><br/>${timeStr}<br/>${t('scatterChart.value')}: <span style="color:${chartTextColor}">${yValue}</span>`;
       }
     },
     legend: { show: true, bottom: 0, data: legendNames, textStyle: { color: chartTextColor } },
@@ -237,9 +240,13 @@ const chartOption = computed(() => {
     xAxis: {
       type: 'time', name: config.value.xAxisName,
       nameTextStyle: { fontWeight: 'bold', color: chartTextColor },
-      axisLabel: { color: chartTextColor, formatter: (value) => {
-          return new Date(value).toLocaleTimeString(undefined, { hour12: !config.value.use24HourFormat, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      }}
+      axisLabel: { 
+        color: chartTextColor, 
+        formatter: (value) => {
+          const fullDateTime = formatTime(value);
+          return fullDateTime.replace(' ', '\n');
+        } 
+      }
     },
     yAxis: {
       type: 'value', name: config.value.yAxisName,

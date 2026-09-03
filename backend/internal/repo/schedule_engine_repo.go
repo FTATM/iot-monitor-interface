@@ -41,7 +41,7 @@ func (r *scheduleEngineRepo) GetById(ctx context.Context, id string) (*model.Sch
 
 func (r *scheduleEngineRepo) UpdateStatus(ctx context.Context, id, status string) error {
 	const fname = "UpdateStatus"
-	_, err := r.db(ctx).Exec(ctx, `UPDATE schedule SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE schedule_id = $2`, status, id)
+	_, err := r.db(ctx).Exec(ctx, `UPDATE schedule SET status = $1, updated_at = now() WHERE schedule_id = $2`, status, id)
 	if err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}
@@ -50,7 +50,7 @@ func (r *scheduleEngineRepo) UpdateStatus(ctx context.Context, id, status string
 
 func (r *scheduleEngineRepo) UpdateLastRun(ctx context.Context, id string) error {
 	const fname = "UpdateLastRun"
-	_, err := r.db(ctx).Exec(ctx, `UPDATE schedule SET last_run_at = CURRENT_TIMESTAMP WHERE schedule_id = $1`, id)
+	_, err := r.db(ctx).Exec(ctx, `UPDATE schedule SET last_run_at = now() WHERE schedule_id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("[%s]>[%s]: %w", r.prefixError, fname, err)
 	}

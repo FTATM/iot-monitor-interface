@@ -118,7 +118,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue']);
 
 const { isLoading: isUploading, error: uploadError, data: uploadData, execute: uploadApi } = useMutation();
-
+const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const activeDevices = computed(() => props.selectedDeviceIds || []);
 
 const localConfig = ref({
@@ -136,6 +136,21 @@ const localConfig = ref({
 const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
+
+    // Check MIME type
+    if (!allowedMimeTypes.includes(file.type)) {
+        uploadError.value = { message: t('visualizationWidget.messages.fileNotAllowed') };
+        event.target.value = ''; // Reset file input
+        return;
+    }
+
+    // Optional: Add a max size check (e.g., 10MB)
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+        uploadError.value = { message: t('visualizationWidget.messages.fileTooLarge') };
+        event.target.value = '';
+        return;
+    }
 
     const formData = new FormData();
     formData.append('image', file);

@@ -132,7 +132,7 @@ func (h *CanvasHandler) UpsertCanvasRole(w http.ResponseWriter, r *http.Request)
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -184,7 +184,7 @@ func (h *CanvasHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -199,7 +199,7 @@ func (h *CanvasHandler) Create(w http.ResponseWriter, r *http.Request) {
 	err = h.service.CreateCanvas(r.Context(), &createCanvas, authUserId)
 	if err != nil {
 		if errors.Is(err, model.ErrDuplicate) {
-			res.Message = "Duplicate data"
+			res.Message = "t_dup"
 			respondJson(w, http.StatusBadRequest, &res)
 		} else {
 			res.Message = "Error"
@@ -241,7 +241,7 @@ func (h *CanvasHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -256,7 +256,7 @@ func (h *CanvasHandler) Update(w http.ResponseWriter, r *http.Request) {
 	err = h.service.UpdateCanvas(r.Context(), &updateCanvas, authUserId)
 	if err != nil {
 		if errors.Is(err, model.ErrDuplicate) {
-			res.Message = "Duplicate data"
+			res.Message = "t_dup"
 			respondJson(w, http.StatusBadRequest, &res)
 		} else {
 			res.Message = "Error"
@@ -298,7 +298,7 @@ func (h *CanvasHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -356,7 +356,7 @@ func (h *CanvasHandler) HandleRawQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}

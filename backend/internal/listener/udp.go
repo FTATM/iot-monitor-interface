@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"net"
@@ -11,7 +12,6 @@ import (
 	"github.com/FTATM/iot-monitor-interface/internal/model"
 )
 
-// เพิ่ม cacheSvc เข้ามาในพารามิเตอร์
 func StartUDPServer(ctx context.Context, port string, svc model.DeviceGatewayService, sessionSvc model.SessionManagerService, cacheSvc model.CacheService) {
 	addr, err := net.ResolveUDPAddr("udp", port)
 	if err != nil {
@@ -26,7 +26,7 @@ func StartUDPServer(ctx context.Context, port string, svc model.DeviceGatewaySer
 	}
 	slog.InfoContext(ctx, "UDP Listener started", slog.String("port", port))
 
-	// ลงทะเบียน UDP Connection เข้า SessionManager สำหรับส่งคำสั่ง (Routing)
+	// Register UDP Connection into SessionManager for routing commands
 	sessionSvc.SetUDPServer(conn)
 
 	go func() {
@@ -34,6 +34,9 @@ func StartUDPServer(ctx context.Context, port string, svc model.DeviceGatewaySer
 		slog.Info("Shutting down UDP listener...")
 		conn.Close()
 	}()
+
+	// ⚡ 1. Create a map to track known devices and their current UDP address
+	knownDevices := make(map[int]string)
 
 	buffer := make([]byte, 2048) // Buffer size for incoming packets
 
@@ -54,7 +57,7 @@ func StartUDPServer(ctx context.Context, port string, svc model.DeviceGatewaySer
 
 		var incomingData []model.DeviceDataPayloadReq
 
-		// ตรวจสอบรูปแบบ Payload ว่าเป็น Array หรือ Object
+		// Check payload format (Array or Object)
 		switch packetData[0] {
 		case '[':
 			if err := json.Unmarshal(packetData, &incomingData); err != nil {
@@ -72,30 +75,54 @@ func StartUDPServer(ctx context.Context, port string, svc model.DeviceGatewaySer
 			continue
 		}
 
-		// ประมวลผลข้อมูลแต่ละรายการใน Payload
+		currentAddrString := remoteAddr.String()
+
+		// Process each item in the payload
 		for _, req := range incomingData {
 			if req.DeviceName == "" {
 				continue
 			}
 
-			// ค้นหา Device ID จาก Cache Service ตัวใหม่
-			deviceId, err := cacheSvc.GetDeviceIdByName(ctx, req.DeviceName)
+			// Find Device ID from Cache Service
+			deviceId, protocol, err := cacheSvc.GetDeviceInfoByName(ctx, req.DeviceName)
 			if err != nil || deviceId <= 0 {
 				slog.Warn("Unknown device in UDP payload", slog.String("device", req.DeviceName))
 				continue
 			}
 
-			// ลงทะเบียน IP/Port เพื่อใช้ส่ง Command กลับ และอัปเดตสถานะ Online
-			sessionSvc.RegisterUDP(deviceId, remoteAddr)
-			sessionSvc.MarkDeviceActive(deviceId)
-
-			// สร้างข้อมูลสำหรับ Database พร้อมปรับ Scale
-			deviceData := model.DeviceData{
-				DeviceId:  deviceId,
-				ValueData: int(math.Round(req.ValueData * model.DeviceScale)),
+			if protocol != "UDP" {
+				slog.Warn("Device protocol mismatch", slog.String("DeviceName", req.DeviceName), slog.String("expected", "UDP"), slog.String("got", protocol))
+				continue
 			}
 
-			// ส่งเข้าระบบ Batcher
+			// ⚡ 2. Check if this is a new connection or if the device's port changed
+			if knownDevices[deviceId] != currentAddrString {
+				knownDevices[deviceId] = currentAddrString
+
+				// Register IP/Port to send Commands back
+				sessionSvc.RegisterUDP(deviceId, remoteAddr)
+
+				// ⚡ 3. Send ACK back to the UDP client
+				ackMsg := fmt.Appendf(nil, "UDP %s connected!\n", req.DeviceName)
+				if _, err := conn.WriteToUDP(ackMsg, remoteAddr); err != nil {
+					slog.WarnContext(ctx, "Failed to send ACK to UDP device",
+						slog.String("device", req.DeviceName),
+						slog.String("error", err.Error()),
+					)
+				}
+			}
+
+			// Mark device as online
+			sessionSvc.MarkDeviceActive(deviceId)
+
+			// Create database payload with scaled value
+			deviceData := model.DeviceData{
+				DeviceId:   deviceId,
+				DeviceName: req.DeviceName,
+				ValueData:  int(math.Round(req.ValueData * model.DeviceScale)),
+			}
+
+			// Send to Batcher
 			svc.Add(deviceData)
 		}
 	}

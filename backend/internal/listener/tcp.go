@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"net"
@@ -49,23 +50,22 @@ func handleTCPConnection(ctx context.Context, conn net.Conn, svc model.DeviceGat
 
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		tcpConn.SetKeepAlive(true)
-		// Send a keep-alive probe every 3 minutes.
-		// If the device is physically gone, this connection will fail and close itself.
 		tcpConn.SetKeepAlivePeriod(3 * time.Minute)
 	}
 
-	var connectedDeviceID int
+	// ⚡ 1. ใช้ Slice และ Map เพื่อติดตามอุปกรณ์หลายตัวบน Connection เดียว (Gateway Mode)
+	var connectedDeviceIDs []int
+	registeredDevices := make(map[int]bool)
 
 	defer func() {
 		conn.Close()
-		// Pass the exact connection object so it doesn't accidentally delete a new takeover connection
-		if connectedDeviceID > 0 {
-			sessionSvc.UnregisterTCP(connectedDeviceID, conn)
+		// ยกเลิกการลงทะเบียนอุปกรณ์ทั้งหมดที่ผูกกับ Connection นี้
+		for _, id := range connectedDeviceIDs {
+			sessionSvc.UnregisterTCP(id, conn)
 		}
-		slog.InfoContext(ctx, "Device disconnected from TCP", slog.String("ip", remoteAddr))
+		slog.InfoContext(ctx, "Device/Gateway disconnected from TCP", slog.String("ip", remoteAddr))
 	}()
 
-	// Read data line-by-line (assuming devices send JSON separated by \n)
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		rawLine := bytes.TrimSpace(scanner.Bytes())
@@ -74,18 +74,14 @@ func handleTCPConnection(ctx context.Context, conn net.Conn, svc model.DeviceGat
 		}
 
 		var incomingData []model.DeviceDataPayloadReq
-
-		// 1. Handle both Array and Object JSON payloads
 		switch rawLine[0] {
 		case '[':
 			if err := json.Unmarshal(rawLine, &incomingData); err != nil {
-				slog.Debug("Invalid JSON array received over TCP", slog.String("ip", remoteAddr))
 				continue
 			}
 		case '{':
 			var single model.DeviceDataPayloadReq
 			if err := json.Unmarshal(rawLine, &single); err != nil {
-				slog.Debug("Invalid JSON object received over TCP", slog.String("ip", remoteAddr))
 				continue
 			}
 			incomingData = append(incomingData, single)
@@ -93,44 +89,50 @@ func handleTCPConnection(ctx context.Context, conn net.Conn, svc model.DeviceGat
 			continue
 		}
 
-		// 2. Process the payload and resolve the ID
 		for _, req := range incomingData {
 			if req.DeviceName == "" {
 				continue
 			}
 
-			// Look up the Device ID using our Cache Service
-			deviceId, err := cacheSvc.GetDeviceIdByName(ctx, req.DeviceName)
+			deviceId, protocol, err := cacheSvc.GetDeviceInfoByName(ctx, req.DeviceName)
 			if err != nil || deviceId <= 0 {
-				slog.Warn("Unknown device in TCP payload", slog.String("device", req.DeviceName))
+				slog.Warn("Unknown or empty device name received", slog.String("groupName", req.DeviceName))
 				continue
 			}
 
-			// 3. Register the TCP connection for the very first valid device ID we see on this socket
-			if connectedDeviceID == 0 {
-				connectedDeviceID = deviceId
-				sessionSvc.RegisterTCP(deviceId, conn)
+			if protocol != "TCP" {
+				slog.Warn("Device protocol mismatch", slog.String("DeviceName", req.DeviceName), slog.String("expected", "TCP"), slog.String("got", protocol))
+				continue
 			}
 
-			// Mark device as active
+			// ⚡ 2. หากพบ Device ใหม่ที่เพิ่งส่งข้อมูลมาทาง Socket นี้ ให้ลงทะเบียนผูกกับ Socket ทันที
+			if !registeredDevices[deviceId] {
+				registeredDevices[deviceId] = true
+				connectedDeviceIDs = append(connectedDeviceIDs, deviceId)
+				sessionSvc.RegisterTCP(deviceId, conn)
+
+				// ⚡ NEW: Send ACK back to the device/gateway
+				ackMsg := fmt.Appendf(nil, "TCP %s connected!\n", req.DeviceName)
+				if _, err := conn.Write(ackMsg); err != nil {
+					slog.WarnContext(ctx, "Failed to send ACK to TCP device",
+						slog.String("device", req.DeviceName),
+						slog.String("error", err.Error()),
+					)
+				}
+			}
+
 			sessionSvc.MarkDeviceActive(deviceId)
 
-			// Transform to database model with scaled value
 			deviceData := model.DeviceData{
-				DeviceId:  deviceId,
-				ValueData: int(math.Round(req.ValueData * model.DeviceScale)),
+				DeviceId:   deviceId,
+				DeviceName: req.DeviceName,
+				ValueData:  int(math.Round(req.ValueData * model.DeviceScale)),
 			}
-
-			// Pass to the Batcher Service
 			svc.Add(deviceData)
 		}
 	}
 
-	// FIX: Check why the scanner loop stopped (Error vs normal EOF)
 	if err := scanner.Err(); err != nil {
-		slog.ErrorContext(ctx, "TCP stream read error",
-			slog.String("error", err.Error()),
-			slog.String("ip", remoteAddr),
-		)
+		slog.ErrorContext(ctx, "TCP stream read error", slog.String("error", err.Error()))
 	}
 }

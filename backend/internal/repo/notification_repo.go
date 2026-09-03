@@ -198,9 +198,7 @@ func (r *notificationRepo) GetActiveRulesByDeviceId(ctx context.Context, deviceI
 			r.condition, 
 			r.threshold, 
 			r.reason, 
-			r.active,
-			r.last_triggered_at,
-			r.cooldown_minutes
+			r.active
 		FROM device_rule_notification r
 		INNER JOIN device d ON r.device_id = d.device_id
 		WHERE r.device_id = $1 

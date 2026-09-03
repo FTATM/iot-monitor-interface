@@ -83,7 +83,7 @@ func (h *DeviceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -97,7 +97,7 @@ func (h *DeviceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	err = h.service.CreateDevice(r.Context(), devices, authUserId)
 	if err != nil {
 		if errors.Is(err, model.ErrDuplicate) {
-			res.Message = "Device Duplicate"
+			res.Message = "t_dup"
 			respondJson(w, http.StatusBadRequest, &res)
 		} else {
 			res.Message = "Error"
@@ -141,7 +141,7 @@ func (h *DeviceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -163,7 +163,7 @@ func (h *DeviceHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		if errors.Is(err, model.ErrDuplicate) {
-			res.Message = "Device Duplicate"
+			res.Message = "t_dup"
 			respondJson(w, http.StatusBadRequest, &res)
 		} else {
 			res.Message = "Error"
@@ -216,7 +216,7 @@ func (h *DeviceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -270,7 +270,7 @@ func (h *DeviceHandler) PingDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -335,7 +335,7 @@ func (h *DeviceHandler) TriggerCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -542,7 +542,7 @@ func (h *DeviceHandler) ValidateImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -565,6 +565,7 @@ func (h *DeviceHandler) ValidateImport(w http.ResponseWriter, r *http.Request) {
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 
 	var rows []importRow
+	const maxImportRows = 4000
 
 	// 2. Parse based on file type
 	switch ext {
@@ -575,11 +576,19 @@ func (h *DeviceHandler) ValidateImport(w http.ResponseWriter, r *http.Request) {
 			Protocol   string `json:"protocol"`
 			Status     string `json:"status"`
 		}
+
 		if err := json.NewDecoder(file).Decode(&incomingData); err != nil {
 			res.Message = "Invalid JSON format"
 			respondJson(w, http.StatusBadRequest, &res)
 			return
 		}
+
+		if len(incomingData) > maxImportRows {
+			res.Message = fmt.Sprintf("File exceeds maximum allowed rows (%d rows)", maxImportRows)
+			respondJson(w, http.StatusBadRequest, &res)
+			return
+		}
+
 		for _, d := range incomingData {
 			active := true
 			if strings.ToLower(strings.TrimSpace(d.Status)) == "inactive" {
@@ -610,6 +619,12 @@ func (h *DeviceHandler) ValidateImport(w http.ResponseWriter, r *http.Request) {
 
 		if len(records) == 0 {
 			res.Message = "Error: File is completely empty"
+			respondJson(w, http.StatusBadRequest, &res)
+			return
+		}
+
+		if len(records)-1 > maxImportRows {
+			res.Message = fmt.Sprintf("File exceeds maximum allowed rows (%d rows)", maxImportRows)
 			respondJson(w, http.StatusBadRequest, &res)
 			return
 		}
@@ -669,6 +684,12 @@ func (h *DeviceHandler) ValidateImport(w http.ResponseWriter, r *http.Request) {
 
 		if len(records) == 0 {
 			res.Message = "Error: Excel sheet is completely empty"
+			respondJson(w, http.StatusBadRequest, &res)
+			return
+		}
+
+		if len(records)-1 > maxImportRows {
+			res.Message = fmt.Sprintf("File exceeds maximum allowed rows (%d rows)", maxImportRows)
 			respondJson(w, http.StatusBadRequest, &res)
 			return
 		}
@@ -798,7 +819,7 @@ func (h *DeviceHandler) ExportDevices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -941,7 +962,7 @@ func (h *DeviceHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -955,7 +976,7 @@ func (h *DeviceHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	err = h.service.CreateDeviceGroup(r.Context(), deviceGroup, authUserId)
 	if err != nil {
 		if errors.Is(err, model.ErrDuplicate) {
-			res.Message = "Device Group Duplicate"
+			res.Message = "t_dup"
 			respondJson(w, http.StatusBadRequest, &res)
 		} else {
 			res.Message = "Error"
@@ -999,7 +1020,7 @@ func (h *DeviceHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -1013,7 +1034,7 @@ func (h *DeviceHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	err = h.service.UpdateDeviceGroup(r.Context(), &deviceGroup, authUserId)
 	if err != nil {
 		if errors.Is(err, model.ErrDuplicate) {
-			res.Message = "Device Group Duplicate"
+			res.Message = "t_dup"
 			respondJson(w, http.StatusBadRequest, &res)
 		} else {
 			res.Message = "Error"
@@ -1066,7 +1087,7 @@ func (h *DeviceHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}

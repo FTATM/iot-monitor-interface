@@ -18,7 +18,7 @@
     <!-- 3-Column Table -->
     <TableData :data="roleTable" :columns="tableColumns" :initial-sorting="[{ id: 'roleName', desc: false }]"
       :is-loading="isRolesLoading">
-      
+
       <template #cell-roleName="{ value }">
         <span>{{ value }}</span>
       </template>
@@ -53,7 +53,8 @@
         </h3>
 
         <!-- Multi-Select Checkbox List -->
-        <div class="form-control w-full max-h-[300px] overflow-y-auto bg-base-200/50 p-4 rounded-box border border-base-200 gap-1">
+        <div
+          class="form-control w-full max-h-[300px] overflow-y-auto bg-base-200/50 p-4 rounded-box border border-base-200 gap-1">
           <label v-for="canvas in canvasList" :key="canvas.canvasId"
             class="label cursor-pointer justify-start gap-4 hover:bg-base-200 p-2 rounded-lg transition-colors">
             <input type="checkbox" :value="canvas.canvasId" v-model="selectedCanvases"
@@ -68,7 +69,9 @@
 
         <!-- Footer Actions -->
         <div class="modal-action mt-6">
-          <button type="button" @click="closeEditModal" class="btn btn-ghost" :disabled="isSaving">{{ $t('common.cancel') }}</button>
+          <button type="button" @click="closeEditModal" class="btn btn-ghost" :disabled="isSaving">{{
+            $t('common.cancel')
+          }}</button>
           <button type="button" @click="saveAccess" class="btn btn-primary text-white" :disabled="isSaving">
             <span v-if="isSaving" class="loading loading-spinner loading-sm"></span>
             {{ $t('common.save') }}
@@ -94,6 +97,8 @@ import { Icon } from '@iconify/vue';
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
 import TableData from '@/components/TableData.vue';
+import { useErrorHandler } from '@/composables/useErrorHandler';
+const { handleError } = useErrorHandler();
 
 const { t } = useI18n();
 
@@ -107,11 +112,11 @@ const { hasPermission } = permissionStore;
 
 const roleTable = ref([]);
 const canvasList = ref([]);
-const roleCanvasMap = ref(new Map()); 
+const roleCanvasMap = ref(new Map());
 
 const editModal = ref(null);
 const editingRole = ref(null);
-const selectedCanvases = ref([]); 
+const selectedCanvases = ref([]);
 
 const tableColumns = computed(() => [
   {
@@ -136,14 +141,14 @@ const setupData = async () => {
   if (!roleError.value && roleData.value) {
     roleTable.value = roleData.value.data;
   } else {
-    toast.error(t('canvasAccess.messages.loadRolesFailed'));
+    toast.error(t('common.messages.loadFailed', { item: "role" }));
   }
 
   await fetchCanvasesApi('/canvas/getall');
   if (!canvasError.value && canvasData.value) {
     canvasList.value = canvasData.value.data;
   } else {
-    toast.error(t('canvasAccess.messages.loadCanvasesFailed'));
+    toast.error(t('common.messages.loadFailed', { item: "canvas" }));
   }
 
   await fetchMappingApi('/canvas/getallcanvasroledetail');
@@ -153,7 +158,7 @@ const setupData = async () => {
       roleCanvasMap.value.set(detail.roleId, detail.canvasIds || []);
     }
   } else if (mappingError.value) {
-    toast.error(t('canvasAccess.messages.loadMappingFailed'));
+    toast.error(t('common.messages.loadFailed', { item: "role map" }));
   }
 };
 
@@ -194,7 +199,7 @@ const saveAccess = async () => {
     toast.success(t('common.messages.updateSuccess', { name: editingRole.value.roleName }));
     closeEditModal();
   } else {
-    toast.error(updateError.value?.message || t('common.messages.updateError'));
+    toast.error(handleError(updateError, 'common.messages.updateError'));
   }
 };
 

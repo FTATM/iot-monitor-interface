@@ -71,7 +71,7 @@
             <Icon icon="lucide:pencil" class="w-5 h-5" />
           </button>
           <button @click="openDeleteModal(row)" class="btn btn-sm btn-error text-white">
-            <Icon icon="lucide:trash" class="w-5 h-5" />
+            <Icon icon="lucide:trash-2" class="w-5 h-5" />
           </button>
         </div>
       </template>
@@ -93,11 +93,16 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3">
 
             <label class="form-control w-full sm:col-span-2">
-              <div class="label pb-1">
+              <div class="label pb-1 flex justify-between">
                 <span class="label-text font-semibold">{{ $t('common.deviceName') }}</span>
+                <!-- Added character counter -->
+                <span class="label-text-alt text-base-content/60 font-mono">
+                  {{ form.deviceName?.length || 0 }}/31
+                </span>
               </div>
-              <input type="text" v-model="form.deviceName" :placeholder="$t('device.deviceNamePlaceholder')"
-                @blur="v$.deviceName.$touch()"
+              <!-- Added maxlength="31" -->
+              <input type="text" v-model="form.deviceName" maxlength="31"
+                :placeholder="$t('device.deviceNamePlaceholder')" @blur="v$.deviceName.$touch()"
                 :class="['input input-bordered w-full', { 'input-error': v$.deviceName.$error }]" />
               <div class="label px-1 py-1 h-6">
                 <span v-if="v$.deviceName.$error" class="label-text-alt text-error font-medium">
@@ -138,7 +143,7 @@
               <div class="flex items-center justify-between">
                 <h4 class="font-bold text-sm text-base-content uppercase tracking-wider m-0">{{
                   $t('device.networkStatus')
-                  }}</h4>
+                }}</h4>
 
                 <!-- ⚡ NEW: Disabled Ping Display Logic -->
                 <div v-if="!form.protocol || form.protocol === 'none'"
@@ -164,7 +169,7 @@
               <div v-if="!form.isConnected" class="flex items-center justify-between">
                 <span class="text-sm font-semibold">{{ $t('device.lastSeenAt') }}</span>
                 <span class="text-sm font-mono text-base-content/70">
-                  {{ formatLastSeen(form.lastSeenAt) }}
+                  {{ formatTime(form.lastSeenAt) }}
                 </span>
               </div>
             </div>
@@ -242,38 +247,66 @@
             </div>
           </div>
 
-          <div v-if="validationResults.length > 0" class="overflow-x-auto border border-base-200 rounded-box">
-            <table class="table table-sm table-zebra w-full">
-              <thead class="bg-base-200/50">
-                <tr>
-                  <th>{{ $t('common.deviceName') }}</th>
-                  <th>{{ $t('common.protocol') }}</th>
-                  <th>{{ $t('common.active') }}</th>
-                  <th>{{ $t('device.import.validation') }}</th>
-                  <th>{{ $t('device.import.message') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, idx) in validationResults" :key="idx">
-                  <td>{{ row.deviceName }}</td>
-                  <td>{{ row.protocol }}</td>
-                  <td>
-                    <span class="badge badge-sm font-semibold uppercase tracking-wider"
-                      :class="row.active === false ? 'badge-ghost text-base-content/50' : 'badge-success'">
-                      {{ row.active === false ? $t('common.inactive') : $t('common.active') }}
-                    </span>
-                  </td>
-                  <td>
-                    <span class="badge badge-sm" :class="row.isValid ? 'badge-success' : 'badge-error'">
-                      {{ row.isValid ? $t('device.import.pass') : $t('device.import.error') }}
-                    </span>
-                  </td>
-                  <td :class="row.isValid ? 'text-success' : 'text-error font-medium'">
-                    {{ row.message }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-if="validationResults.length > 0" class="flex flex-col gap-2">
+            <!-- Status Banner -->
+            <div class="flex justify-between items-center px-1 text-xs">
+              <span class="font-medium text-base-content/70">
+                Total rows: <b>{{ validationResults.length }}</b>
+              </span>
+              <span v-if="invalidCount > 0" class="badge badge-error badge-sm text-white font-bold">
+                {{ invalidCount }} Invalid row(s) found
+              </span>
+              <span v-else class="badge badge-success badge-sm text-white font-bold">
+                All rows valid
+              </span>
+            </div>
+
+            <!-- Table -->
+            <div class="overflow-x-auto border border-base-200 rounded-box">
+              <table class="table table-sm table-zebra w-full">
+                <thead class="bg-base-200/50">
+                  <tr>
+                    <th>{{ $t('common.deviceName') }}</th>
+                    <th>{{ $t('common.protocol') }}</th>
+                    <th>{{ $t('common.active') }}</th>
+                    <th>{{ $t('device.import.validation') }}</th>
+                    <th>{{ $t('device.import.message') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, idx) in pagedValidationResults" :key="idx" :class="{ 'bg-error/10': !row.isValid }">
+                    <td>{{ row.deviceName }}</td>
+                    <td>{{ row.protocol || '-' }}</td>
+                    <td>
+                      <span class="badge badge-sm font-semibold uppercase tracking-wider"
+                        :class="row.active === false ? 'badge-ghost text-base-content/50' : 'badge-success'">
+                        {{ row.active === false ? $t('common.inactive') : $t('common.active') }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="badge badge-sm" :class="row.isValid ? 'badge-success' : 'badge-error'">
+                        {{ row.isValid ? $t('device.import.pass') : $t('device.import.error') }}
+                      </span>
+                    </td>
+                    <td :class="row.isValid ? 'text-success' : 'text-error font-medium'">
+                      {{ row.message }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Minimal Pagination Controls -->
+            <div class="flex justify-between items-center px-1 pt-1 text-xs">
+              <span class="text-base-content/60">
+                Page {{ currentPage }} of {{ totalPages }}
+              </span>
+              <div class="join">
+                <button class="join-item btn btn-xs" :disabled="currentPage === 1" @click="currentPage--">‹</button>
+                <button class="join-item btn btn-xs" :disabled="currentPage >= totalPages"
+                  @click="currentPage++">›</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -298,13 +331,17 @@ import { useI18n } from 'vue-i18n';
 import { useMutation } from '@/composables/useMutation';
 import { useFetch } from '@/composables/useFetch';
 import { useVuelidate } from '@vuelidate/core';
-import { required, helpers } from '@vuelidate/validators';
+import { required, maxLength, helpers } from '@vuelidate/validators';
 import { toast } from 'vue3-toastify';
 import { Icon } from '@iconify/vue';
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
 import TableData from '@/components/TableData.vue';
 import { useDownload } from '@/composables/useDownload';
+import { useErrorHandler } from '@/composables/useErrorHandler';
+const { handleError } = useErrorHandler();
+import { useFormatter } from '@/composables/useFormatter';
+const { formatTime } = useFormatter();
 
 const { t } = useI18n();
 
@@ -333,6 +370,8 @@ const importModal = ref(null);
 const selectedFile = ref(null);
 const isImporting = ref(false);
 const validationResults = ref([]);
+const currentPage = ref(1);
+const pageSize = 10;
 
 const tableColumns = computed(() => [
   { header: t('common.id'), accessorKey: 'deviceId', meta: { headerClass: 'w-16', cellClass: 'font-bold' } },
@@ -354,18 +393,37 @@ const canConfirmImport = computed(() => {
   return validationResults.value.length > 0 && validationResults.value.every(row => row.isValid);
 });
 
-const formatLastSeen = (timestamp) => {
-  if (!timestamp) return t('device.neverConnected');
-  const date = new Date(timestamp);
-  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-};
-
-// ⚡ REMOVED: Strict protocol validation. It is now completely optional!
 const rules = computed(() => ({
-  deviceName: { required: helpers.withMessage(t('device.validation.deviceNameRequired'), required) }
+  deviceName: {
+    required: helpers.withMessage(t('device.validation.deviceNameRequired'), required),
+    maxLength: helpers.withMessage(t('common.validation.maxLength', { len: 31 }), maxLength(31))
+  }
 }));
 
 const v$ = useVuelidate(rules, form);
+
+// Sort invalid first
+const sortedValidationResults = computed(() => {
+  return [...validationResults.value].sort((a, b) => {
+    if (!a.isValid && b.isValid) return -1;
+    if (a.isValid && !b.isValid) return 1;
+    return 0;
+  });
+});
+
+const totalPages = computed(() => {
+  return Math.ceil(sortedValidationResults.value.length / pageSize) || 1;
+});
+
+// Slice only the active page for the DOM
+const pagedValidationResults = computed(() => {
+  const start = (currentPage.value - 1) * pageSize;
+  return sortedValidationResults.value.slice(start, start + pageSize);
+});
+
+const invalidCount = computed(() => {
+  return validationResults.value.filter(row => !row.isValid).length;
+});
 
 const testConnection = async () => {
   if (!editingDeviceId.value) return;
@@ -386,7 +444,7 @@ const testConnection = async () => {
       if (tblRecord) tblRecord.isConnected = false;
     }
   } else {
-    toast.error(pingError.value?.message || t('device.messages.pingFailed'));
+    toast.error(handleError(pingError, 'device.messages.pingFailed'));
   }
 };
 
@@ -424,7 +482,7 @@ const confirmDelete = async () => {
     await loadTable();
     closeDeleteModal();
   } else {
-    toast.error(deviceDeletedError.value?.message || t('common.messages.deleteError'));
+    toast.error(handleError(deviceDeletedError, 'common.messages.deleteFailed', { item: deviceToDelete.value.deviceName }));
   }
 };
 
@@ -474,7 +532,7 @@ const submitForm = async () => {
       toast.success(t('common.messages.updated'));
       await loadTable();
     } else {
-      toast.error(deviceUpdatedError.value?.message || t('common.messages.updateError'));
+      toast.error(handleError(deviceUpdatedError, 'common.messages.updateFailed', { item: payload.deviceName }));
     }
   } else {
     await deviceAddedApi('/device/create', [payload], 'POST');
@@ -483,7 +541,7 @@ const submitForm = async () => {
       toast.success(t('common.messages.created'));
       await loadTable();
     } else {
-      toast.error(deviceAddedError.value?.message || t('common.messages.createError'));
+      toast.error(handleError(deviceAddedError, 'common.messages.createFailed', { item: payload.deviceName }));
     }
   }
 };
@@ -511,7 +569,7 @@ const confirmImport = async () => {
     await loadTable();
     closeImportModal();
   } else {
-    toast.error(deviceAddedError.value?.message || t('device.messages.importFailed'));
+    toast.error(handleError(deviceAddedError, 'device.messages.importFailed'));
   }
   isImporting.value = false;
 };
@@ -531,7 +589,7 @@ const exportData = async (format) => {
   if (success) {
     toast.success(t('device.messages.exportSuccess', { format: format.toUpperCase() }));
   } else {
-    toast.error(exportError.value?.message || t('device.messages.exportFailed', { format: format.toUpperCase() }));
+    toast.error(handleError(exportError, 'device.messages.exportFailed', { format: format.toUpperCase() }));
   }
 };
 

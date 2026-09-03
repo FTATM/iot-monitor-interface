@@ -1,11 +1,11 @@
 import { createApp } from 'vue'
+import '@vuepic/vue-datepicker/dist/main.css';
 import './style.css'
 import App from './App.vue'
 import router from './router';
 import 'vue3-toastify/dist/index.css';
 import { createPinia } from 'pinia';
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
-import '@vuepic/vue-datepicker/dist/main.css';
 import { i18n } from './i18n'
 
 const app = createApp(App);

@@ -47,6 +47,8 @@ import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
 import { useLiveStreamStore } from '@/stores/useLiveStreamStore';
 import { useFetch } from '@/composables/useFetch';
+import { useFormatter } from '@/composables/useFormatter';
+const { formatTime } = useFormatter();
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent]);
 
@@ -235,10 +237,7 @@ const chartOption = computed(() => {
       trigger: 'axis',
       formatter: (params) => {
         if (!params.length) return '';
-        const timeStr = new Date(params[0].value[0]).toLocaleTimeString(undefined, {
-          hour12: !config.value.use24HourFormat,
-          hour: '2-digit', minute: '2-digit', second: '2-digit'
-        });
+        const timeStr = formatTime(params[0].value[0]);
 
         let tipHtml = `<strong>${timeStr}</strong><br/>`;
         params.forEach(p => {
@@ -260,10 +259,8 @@ const chartOption = computed(() => {
       axisLabel: {
         color: chartTextColor,
         formatter: (value) => {
-          return new Date(value).toLocaleTimeString(undefined, {
-            hour12: !config.value.use24HourFormat,
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-          });
+          const fullDateTime = formatTime(value);
+          return fullDateTime.replace(' ', '\n');
         }
       }
     },

@@ -135,9 +135,22 @@ func InitializeApi(ctx context.Context) (App, error) {
 	scheduleClient := client.NewScheduleClient(scheduleEngineURL, internalSecret)
 	deviceGatewayClient := client.NewDeviceGatewayClient(deviceGatewayURL, internalSecret)
 	notificationClient := client.NewNotificationClient(
-		config.Sms{},
-		config.Email{},
-		config.Line{},
+		config.Sms{
+			Url:    GetEnvOrDefault("SMS_API_URL", ""),
+			Key:    GetEnvOrDefault("SMS_API_KEY", ""),
+			Secret: GetEnvOrDefault("SMS_API_SECRET", ""),
+			Sender: GetEnvOrDefault("SMS_SENDER", ""),
+		},
+		config.Email{
+			Host:       GetEnvOrDefault("MAIL_HOST", ""),
+			Port:       GetEnvOrDefault("MAIL_PORT", ""),
+			Encryption: GetEnvOrDefault("MAIL_ENCRYPTION", ""),
+			Username:   GetEnvOrDefault("MAIL_USERNAME", ""),
+			Password:   GetEnvOrDefault("MAIL_PASSWORD", ""),
+		},
+		config.Line{
+			Token: GetEnvOrDefault("LINE_NOTIFY_TOKEN", ""),
+		},
 	)
 
 	//? service

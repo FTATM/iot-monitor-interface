@@ -55,7 +55,7 @@ func main() {
 }
 
 func initLogger() {
-	logDir := app.GetEnvOrDefault("LOG_DEVICE_GATEWAY_DIR", "log/gateway")
+	logDir := app.GetEnvOrDefault("LOG_DEVICE_GATEWAY_DIR", "log/devicegateway")
 
 	logMaxSize := app.GetEnvIntOrDefault("LOG_DEVICE_GATEWAY_MAX_SIZE", 10)
 	logMaxBackup := app.GetEnvIntOrDefault("LOG_DEVICE_GATEWAY_MAX_BACKUP", 5)

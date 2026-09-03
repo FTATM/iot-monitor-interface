@@ -65,7 +65,7 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -127,7 +127,7 @@ func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -188,7 +188,7 @@ func (h *ScheduleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}

@@ -233,26 +233,28 @@ func (s *notificationService) evaluateBatch(dataBatch []model.DeviceData) {
 	for _, data := range dataBatch {
 		rules, err := s.notifRepo.GetActiveRulesByDeviceId(ctx, data.DeviceId)
 		if err != nil {
+			slog.Debug(err.Error())
 			continue
 		}
 
+		// ⚡ 1. Calculate the real decimal value immediately!
+		realValue := float64(data.ValueData) / float64(model.DeviceScale)
+
 		var triggeredRules []model.DeviceRuleNotification
 
-		// 1. Check ALL rules in memory first
+		// 2. Check ALL rules using the real, unscaled decimal value
 		for _, rule := range rules {
-			if s.checkCondition(data.ValueData, rule.Condition, rule.Threshold) {
+			// Cast rule.Threshold to float64 to ensure accurate decimal comparison
+			if s.checkCondition(realValue, rule.Condition, float64(rule.Threshold)) {
 				triggeredRules = append(triggeredRules, rule)
 			}
 		}
 
-		// 2. If multiple rules triggered, pick the MOST critical one
+		// 3. If multiple rules triggered, pick the MOST critical one
 		if len(triggeredRules) > 0 {
 			mostCriticalRule := s.findMostCriticalRule(triggeredRules)
 
-			// ⚡ HYBRID LOGIC: Use rule specific cooldown, or fallback to ENV default
-
 			cooldownToUse := s.cooldownNotifSend
-			// cooldownToUse := mostCriticalRule.CooldownMinutes
 
 			// Lock the device using the determined cooldown
 			lockAcquired, err := s.notifRepo.TryAcquireDeviceAlertLock(
@@ -277,7 +279,7 @@ func (s *notificationService) evaluateBatch(dataBatch []model.DeviceData) {
 }
 
 // Simple logic evaluator
-func (s *notificationService) checkCondition(currentValue int, operator string, threshold int) bool {
+func (s *notificationService) checkCondition(currentValue float64, operator string, threshold float64) bool {
 	switch operator {
 	case ">":
 		return currentValue > threshold
@@ -300,35 +302,33 @@ func (s *notificationService) dispatchGroupedNotif(ctx context.Context, users []
 	var smsUsers []model.UserNotificationSend
 	var emailUsers []model.UserNotificationSend
 
-	// 1. Loop through users and group them by their active flags
+	// 1. แปลงค่ากลับไปเป็นทศนิยมตามจริง (หารด้วย 1000)
+	realValue := float64(data.ValueData) / float64(model.DeviceScale)
+
+	// 2. Loop through users and group them by their active flags
 	for _, u := range users {
 		if u.SmsActive {
-			u.Msg = fmt.Sprintf("Alert! Device %d triggered rule. Value: %d\nReason: %s", data.DeviceId, data.ValueData, rule.Reason)
+			// ใช้ %.2f เพื่อแสดงทศนิยม 2 ตำแหน่ง หรือใช้ %g เพื่อละศูนย์ด้านหลัง
+			u.Msg = fmt.Sprintf("Alert! Device: %s triggered rule. Value: %.2f\nReason: %s", data.DeviceName, realValue, rule.Reason)
 			smsUsers = append(smsUsers, u)
 		}
 		if u.EmailActive {
-			u.Msg = fmt.Sprintf("Alert! Device %d triggered rule. Value: %d", data.DeviceId, data.ValueData)
+			u.Msg = fmt.Sprintf("Alert! Device: %s triggered rule. Value: %.2f\nReason: %s", data.DeviceName, realValue, rule.Reason)
 			emailUsers = append(emailUsers, u)
 		}
 	}
 
-	// 2. Prepare the notification payload
-	// dNotif := &model.DeviceRuleNotification{
-	// 	RuleId:   rule.RuleId,
-	// 	DeviceId: data.DeviceId,
-	// }
-
 	// 3. Dispatch to the specific clients
 	if len(smsUsers) > 0 {
-		// You pass the whole slice to your client.
-		// Let the client handle the actual API HTTP looping!
 		if err := s.notifClient.SendSms(ctx, smsUsers); err != nil {
 			slog.Error("Failed to dispatch SMS batch", slog.String("error", err.Error()))
 		}
 	}
 
 	if len(emailUsers) > 0 {
-		// if err := s.notifClient.SendEmail(ctx, emailUsers, dNotif); err != nil { ... }
+		if err := s.notifClient.SendEmail(ctx, emailUsers); err != nil {
+			slog.Error("Failed to dispatch Email batch", slog.String("error", err.Error()))
+		}
 	}
 }
 

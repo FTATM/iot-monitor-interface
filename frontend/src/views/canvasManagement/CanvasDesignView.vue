@@ -68,7 +68,8 @@
             <Icon icon="lucide:palette" class="w-4 h-4 mr-2" /> {{ $t('canvasDesign.canvasStyle') }}
           </button>
 
-          <button @click="loadCurrentCanvas" class="btn btn-ghost btn-sm md:btn-md">{{ $t('canvasDesign.resetLayout') }}</button>
+          <button @click="loadCurrentCanvas" class="btn btn-ghost btn-sm md:btn-md">{{ $t('canvasDesign.resetLayout')
+          }}</button>
           <button @click="saveCurrentCanvas" class="btn btn-success text-white btn-sm md:btn-md">
             <Icon icon="lucide:save" class="w-4 h-4 mr-2" /> {{ $t('common.save') }}
           </button>
@@ -102,7 +103,8 @@
       <ul class="menu bg-base-100 w-56 rounded-box shadow-xl border border-base-200">
         <li>
           <a class="hover:bg-base-200" @click="promptConfig">
-            <Icon icon="lucide:settings" class="w-4 h-4 text-base-content/70" /> {{ $t('canvasDesign.configureWidget') }}
+            <Icon icon="lucide:settings" class="w-4 h-4 text-base-content/70" /> {{ $t('canvasDesign.configureWidget')
+            }}
           </a>
         </li>
         <li>
@@ -135,18 +137,21 @@
           <div v-else
             class="flex flex-col sm:flex-row items-center gap-3 bg-base-200/40 p-3 rounded-xl border border-base-200">
             <div class="flex-1 flex flex-col gap-1.5 w-full">
-              <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{ $t('canvasDesign.start') }}</span>
+              <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{
+                $t('canvasDesign.start') }}</span>
               <input type="color" v-model="canvasConfigForm.bgHex"
                 class="h-9 w-full cursor-pointer rounded border border-base-300 p-0 shadow-sm" />
             </div>
             <Icon icon="lucide:arrow-right" class="w-4 h-4 text-base-content/30 mt-5 hidden sm:block" />
             <div class="flex-1 flex flex-col gap-1.5 w-full">
-              <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{ $t('canvasDesign.end') }}</span>
+              <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{
+                $t('canvasDesign.end') }}</span>
               <input type="color" v-model="canvasConfigForm.bgHex2"
                 class="h-9 w-full cursor-pointer rounded border border-base-300 p-0 shadow-sm" />
             </div>
             <div class="flex-1 flex flex-col gap-1.5 w-full">
-              <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{ $t('canvasDesign.angle') }}</span>
+              <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{
+                $t('canvasDesign.angle') }}</span>
               <select v-model="canvasConfigForm.bgGradientDir" class="select select-bordered select-sm h-9 w-full">
                 <option value="135deg">{{ $t('canvasDesign.directions.diagonal1') }}</option>
                 <option value="to right">{{ $t('canvasDesign.directions.horizontal') }}</option>
@@ -159,7 +164,8 @@
 
         <div class="modal-action mt-6">
           <button type="button" @click="closeCanvasConfig" class="btn btn-ghost">{{ $t('common.cancel') }}</button>
-          <button type="button" @click="saveCanvasConfig" class="btn btn-primary text-white">{{ $t('canvasDesign.applyStyle') }}</button>
+          <button type="button" @click="saveCanvasConfig" class="btn btn-primary text-white">{{
+            $t('canvasDesign.applyStyle') }}</button>
         </div>
       </div>
       <form method="dialog" class="modal-backdrop"><button @click="closeCanvasConfig">close</button></form>
@@ -171,7 +177,8 @@
         <p class="py-4 text-base-content/70">{{ $t('canvasDesign.deleteWarning') }}</p>
         <div class="modal-action">
           <button type="button" @click="closeDeleteModal" class="btn btn-ghost">{{ $t('common.noCancel') }}</button>
-          <button type="button" @click="confirmDelete" class="btn btn-error text-white">{{ $t('common.yesDelete') }}</button>
+          <button type="button" @click="confirmDelete" class="btn btn-error text-white">{{ $t('common.yesDelete')
+          }}</button>
         </div>
       </div>
       <form method="dialog" class="modal-backdrop"><button @click="closeDeleteModal">close</button></form>
@@ -205,7 +212,8 @@
           <div v-show="activeTab === 'general'" class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="flex flex-col gap-3">
               <label class="form-control w-full">
-                <div class="label pb-1"><span class="label-text font-bold">{{ $t('canvasDesign.widgetLabel') }}</span></div>
+                <div class="label pb-1"><span class="label-text font-bold">{{ $t('canvasDesign.widgetLabel') }}</span>
+                </div>
                 <input type="text" v-model="configForm.widgetLabel" class="input input-bordered input-sm w-full" />
               </label>
 
@@ -214,7 +222,8 @@
                   <div>
                     <span class="label-text font-bold">{{ $t('canvasDesign.dataSource') }}</span>
                     <span v-if="deviceSelectionMode === 'single'"
-                      class="label-text-alt text-error font-semibold ml-2">{{ $t('canvasDesign.selectOneDevice') }}</span>
+                      class="label-text-alt text-error font-semibold ml-2">{{ $t('canvasDesign.selectOneDevice')
+                      }}</span>
                   </div>
 
                   <div v-if="deviceSelectionMode === 'multiple'"
@@ -253,7 +262,9 @@
                         {{ dev.deviceName }}
                       </span>
                     </template>
-                    <span v-else class="text-xs text-base-content/50 font-medium my-auto italic">{{ $t('canvasDesign.noDevicesInGroup') }}</span>
+                    <span v-else class="text-xs text-base-content/50 font-medium my-auto italic">{{
+                      $t('canvasDesign.noDevicesInGroup')
+                    }}</span>
                   </div>
                 </div>
               </div>
@@ -284,18 +295,24 @@
                 <div v-else
                   class="flex flex-col sm:flex-row items-center gap-3 bg-base-200/40 p-3 rounded-xl border border-base-200">
                   <div class="flex-1 flex flex-col gap-1.5 w-full">
-                    <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{ $t('canvasDesign.start') }}</span>
+                    <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{
+                      $t('canvasDesign.start')
+                    }}</span>
                     <input type="color" v-model="configForm.widgetStyle.bgHex"
                       class="h-9 w-full cursor-pointer rounded border border-base-300 p-0 shadow-sm" />
                   </div>
                   <Icon icon="lucide:arrow-right" class="w-4 h-4 text-base-content/30 mt-5 hidden sm:block" />
                   <div class="flex-1 flex flex-col gap-1.5 w-full">
-                    <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{ $t('canvasDesign.end') }}</span>
+                    <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{
+                      $t('canvasDesign.end')
+                    }}</span>
                     <input type="color" v-model="configForm.widgetStyle.bgHex2"
                       class="h-9 w-full cursor-pointer rounded border border-base-300 p-0 shadow-sm" />
                   </div>
                   <div class="flex-1 flex flex-col gap-1.5 w-full">
-                    <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{ $t('canvasDesign.angle') }}</span>
+                    <span class="text-[10px] text-base-content/60 font-bold uppercase tracking-wider">{{
+                      $t('canvasDesign.angle')
+                    }}</span>
                     <select v-model="configForm.widgetStyle.bgGradientDir"
                       class="select select-bordered select-sm h-9 w-full">
                       <option value="135deg">{{ $t('canvasDesign.directions.diagonal1') }}</option>
@@ -309,24 +326,40 @@
 
             </div>
             <div class="flex flex-col gap-3">
-              <div class="label pb-0"><span class="label-text font-bold">{{ $t('canvasDesign.gridPosition') }}</span></div>
-              <div class="grid grid-cols-4 gap-2">
-                <label class="form-control"><span
-                    class="label-text-alt mb-1 text-center font-semibold">{{ $t('canvasDesign.xCol') }}</span><input type="number"
-                    v-model="configForm.layoutData.x"
-                    class="input input-bordered input-sm w-full text-center" /></label>
-                <label class="form-control"><span
-                    class="label-text-alt mb-1 text-center font-semibold">{{ $t('canvasDesign.yRow') }}</span><input type="number"
-                    v-model="configForm.layoutData.y"
-                    class="input input-bordered input-sm w-full text-center" /></label>
-                <label class="form-control"><span
-                    class="label-text-alt mb-1 text-center font-semibold">{{ $t('canvasDesign.width') }}</span><input type="number"
-                    v-model="configForm.layoutData.w"
-                    class="input input-bordered input-sm w-full text-center" /></label>
-                <label class="form-control"><span
-                    class="label-text-alt mb-1 text-center font-semibold">{{ $t('canvasDesign.height') }}</span><input type="number"
-                    v-model="configForm.layoutData.h"
-                    class="input input-bordered input-sm w-full text-center" /></label>
+              <div class="label pb-0"><span class="label-text font-bold">{{ $t('canvasDesign.gridPosition') }}</span>
+              </div>
+              <div class="grid grid-cols-4 gap-2 items-end">
+                <label class="form-control">
+                  <span class="label-text-alt mb-1 text-center font-semibold leading-tight">
+                    {{ $t('canvasDesign.xCol') }}
+                  </span>
+                  <input type="number" v-model="configForm.layoutData.x"
+                    class="input input-bordered input-sm w-full text-center" />
+                </label>
+
+                <label class="form-control">
+                  <span class="label-text-alt mb-1 text-center font-semibold leading-tight">
+                    {{ $t('canvasDesign.yRow') }}
+                  </span>
+                  <input type="number" v-model="configForm.layoutData.y"
+                    class="input input-bordered input-sm w-full text-center" />
+                </label>
+
+                <label class="form-control">
+                  <span class="label-text-alt mb-1 text-center font-semibold leading-tight">
+                    {{ $t('canvasDesign.width') }}
+                  </span>
+                  <input type="number" v-model="configForm.layoutData.w"
+                    class="input input-bordered input-sm w-full text-center" />
+                </label>
+
+                <label class="form-control">
+                  <span class="label-text-alt mb-1 text-center font-semibold leading-tight">
+                    {{ $t('canvasDesign.height') }}
+                  </span>
+                  <input type="number" v-model="configForm.layoutData.h"
+                    class="input input-bordered input-sm w-full text-center" />
+                </label>
               </div>
             </div>
           </div>
@@ -363,6 +396,8 @@ import { Icon } from '@iconify/vue';
 
 import NoAccess from '@/components/NoAccess.vue';
 import SearchableDropdown from '@/components/SearchableDropdown.vue';
+import { useErrorHandler } from '@/composables/useErrorHandler';
+const { handleError } = useErrorHandler();
 
 import BarChart from '@/components/widgets/BarChart.vue';
 import BarChartConfig from '@/components/widgets/BarChartConfig.vue';
@@ -405,7 +440,7 @@ const widgetMap = {
   'BarChart': BarChart, 'BulletChart': BulletChart, 'AnalogueGauge': AnalogueGauge, 'LineChart': LineChart,
   'PieChart': PieChart, 'ScatterChart': ScatterChart, 'BarProcess': BarProcess, 'Status': Status,
   'Table': Table, 'Alert': Alert, 'Text': Text, 'ScoreCard': ScoreCard, 'RowChart': RowChart,
-  'InputAction': InputAction, 'DigitalGauge': DigitalGauge,'BarLineChart': BarLineChart,'Visualization': Visualization,
+  'InputAction': InputAction, 'DigitalGauge': DigitalGauge, 'BarLineChart': BarLineChart, 'Visualization': Visualization,
 };
 
 const widgetConfigComponentMap = {
@@ -413,7 +448,7 @@ const widgetConfigComponentMap = {
   'PieChart': PieChartConfig, 'ScatterChart': ScatterChartConfig, 'BarProcess': BarProcessConfig, 'Status': StatusConfig,
   'Table': TableConfig, 'Alert': AlertConfig, 'Text': TextConfig, 'ScoreCard': ScoreCardConfig,
   'RowChart': RowChartConfig, 'InputAction': InputActionConfig, 'DigitalGauge': DigitalGaugeConfig,
-  'BarLineChart': BarLineChartConfig,'Visualization': VisualizationConfig,
+  'BarLineChart': BarLineChartConfig, 'Visualization': VisualizationConfig,
 };
 
 const permissionStore = usePermissionStore();
@@ -429,7 +464,7 @@ const availableTools = computed(() => [
   { type: 'LineChart', name: t('canvasDesign.widgets.lineChart'), icon: 'lucide:line-chart' },
   { type: 'PieChart', name: t('canvasDesign.widgets.pieChart'), icon: 'lucide:pie-chart' },
   { type: 'ScatterChart', name: t('canvasDesign.widgets.scatterChart'), icon: 'lucide:scatter-chart' },
-  { type: 'BarProcess', name: t('canvasDesign.widgets.barProcess'), icon: 'lucide:chart-no-axes-column', rotate:'90deg'},
+  { type: 'BarProcess', name: t('canvasDesign.widgets.barProcess'), icon: 'lucide:chart-no-axes-column', rotate: '90deg' },
   { type: 'BarLineChart', name: t('canvasDesign.widgets.barLineChart'), icon: 'lucide:chart-gantt' },
   { type: 'Status', name: t('canvasDesign.widgets.status'), icon: 'lucide:activity' },
   { type: 'Table', name: t('canvasDesign.widgets.table'), icon: 'lucide:table' },
@@ -497,7 +532,7 @@ const activeCanvasStyle = computed(() => {
 const deviceSelectionMode = computed(() => {
   const type = configForm.value.widgetTypeName;
   if (['Text'].includes(type)) return 'none';
-  if (['AnalogueGauge','DigitalGauge', 'BulletChart', 'Status','BarLineChart'].includes(type)) return 'single';
+  if (['AnalogueGauge', 'DigitalGauge', 'BulletChart', 'Status', 'BarLineChart'].includes(type)) return 'single';
   return 'multiple';
 });
 
@@ -548,12 +583,12 @@ const loadUserCanvas = async () => {
         let resolvedDeviceIds = widget.deviceIds || [];
 
         if (dGroupId !== null) {
-          dsType = 'group'; 
+          dsType = 'group';
           const group = groupMasterMap.get(dGroupId);
           if (group && group.deviceIds) {
             resolvedDeviceIds = [...group.deviceIds];
           } else {
-            resolvedDeviceIds = []; 
+            resolvedDeviceIds = [];
           }
         }
 
@@ -565,7 +600,7 @@ const loadUserCanvas = async () => {
 
           deviceIds: resolvedDeviceIds,
           dataSourceType: dsType,
-          deviceGroupId: dGroupId, 
+          deviceGroupId: dGroupId,
 
           widgetLabel: widget.widgetLabel || '',
           widgetStyle: widget.widgetStyle || { bgHex: '#ffffff', bgHex2: '#f1f5f9', bgGradientDir: '135deg', textHex: '#334155', chartHex: '#3b82f6', useGradient: false },
@@ -592,7 +627,7 @@ const loadUserCanvas = async () => {
       loadCurrentCanvas();
     }
   } else if (userAllCanvasFetchError.value) {
-    toast.error(t('canvasDesign.messages.loadCanvasFailed'));
+    toast.error(t('common.messages.loadFailed', { item: "User Canvas" }));
   }
 };
 
@@ -610,7 +645,7 @@ const setupData = async () => {
       widgetTypeMasterMap.set(i.widgetTypeId, i);
     }
   } else if (widgetTypeMasterError.value) {
-    toast.error(t('canvasDesign.messages.loadTypesFailed'));
+    toast.error(t('common.messages.loadFailed', { item: "widget type" }));
   }
 
   await deviceAllNameFetchApi('/device/getalldevicename');
@@ -619,7 +654,7 @@ const setupData = async () => {
       deviceMasterMap.set(i.deviceId, i);
     }
   } else if (deviceAllNameFetchError.value) {
-    toast.error(t('canvasDesign.messages.loadDevicesFailed'));
+    toast.error(t('common.messages.loadFailed', { item: "device" }));
   }
 
   await groupAllFetchApi('/device/group/getalldetail');
@@ -628,7 +663,7 @@ const setupData = async () => {
       groupMasterMap.set(i.groupId, i);
     }
   } else if (groupAllFetchError.value) {
-    toast.error(t('canvasDesign.messages.loadGroupsFailed'));
+    toast.error(t('common.messages.loadFailed', { item: "group device" }));
   }
 };
 
@@ -637,7 +672,7 @@ const saveCurrentCanvas = async () => {
   const widgetsList = activeLayout.value.map(item => ({
     widgetId: item.widgetId || 0, widgetTypeId: item.widgetTypeId || 0, deviceIds: item.deviceIds || [],
     deviceGroupId: item.dataSourceType === 'group' ? (item.deviceGroupId || null) : null,
-    widgetLabel: item.widgetLabel || t('canvasDesign.newWidget', { type: item.widgetTypeName }), 
+    widgetLabel: item.widgetLabel || t('canvasDesign.newWidget', { type: item.widgetTypeName }),
     layoutData: { x: item.x, y: item.y, w: item.w, h: item.h },
     widgetStyle: item.widgetStyle, customChartData: item.customChartData
   }));
@@ -657,7 +692,7 @@ const saveCurrentCanvas = async () => {
     }
     toast.success(t('common.messages.saved'));
   } else {
-    toast.error(t('common.messages.saveError'));
+    toast.error(handleError(upsertError, 'common.messages.saveError'));
   }
 };
 
@@ -732,7 +767,7 @@ const onDrop = () => {
     // Get translated name if available
     const translatedName = t(`canvasDesign.widgets.${newItem.widgetTypeName.charAt(0).toLowerCase() + newItem.widgetTypeName.slice(1)}`);
     newItem.widgetLabel = t('canvasDesign.newWidget', { type: translatedName !== `canvasDesign.widgets.${newItem.widgetTypeName.charAt(0).toLowerCase() + newItem.widgetTypeName.slice(1)}` ? translatedName : newItem.widgetTypeName });
-    
+
     newItem.widgetStyle = { bgHex: '#ffffff', bgHex2: '#f1f5f9', bgGradientDir: '135deg', textHex: '#334155', chartHex: '#3b82f6', useGradient: false };
     newItem.customChartData = {};
   }
@@ -824,7 +859,7 @@ const saveConfig = () => {
       if (selectedGroup && selectedGroup.deviceIds) {
         finalDeviceIds = [...selectedGroup.deviceIds];
       } else {
-        finalDeviceIds = []; 
+        finalDeviceIds = [];
       }
     }
 

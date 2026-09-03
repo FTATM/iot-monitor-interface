@@ -59,7 +59,7 @@ func (h *NotificationHandler) UpsertUserNotif(w http.ResponseWriter, r *http.Req
 	}
 
 	if !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
@@ -119,7 +119,7 @@ func (h *NotificationHandler) CreateDeviceRule(w http.ResponseWriter, r *http.Re
 
 	hasAccess, err := h.roleService.Access(r.Context(), acc)
 	if err != nil || !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusForbidden, &res)
 		return
 	}
@@ -159,7 +159,7 @@ func (h *NotificationHandler) UpdateDeviceRule(w http.ResponseWriter, r *http.Re
 
 	hasAccess, err := h.roleService.Access(r.Context(), acc)
 	if err != nil || !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusForbidden, &res)
 		return
 	}
@@ -198,7 +198,7 @@ func (h *NotificationHandler) DeleteDeviceRule(w http.ResponseWriter, r *http.Re
 
 	hasAccess, err := h.roleService.Access(r.Context(), acc)
 	if err != nil || !hasAccess {
-		res.Message = "No Access"
+		res.Message = "t_no_access"
 		respondJson(w, http.StatusForbidden, &res)
 		return
 	}

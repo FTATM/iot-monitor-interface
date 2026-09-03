@@ -68,12 +68,36 @@ func (s *sessionManagerService) SetUDPServer(conn *net.UDPConn) {
 
 func (s *sessionManagerService) RegisterTCP(deviceId int, conn net.Conn) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	// Close any existing stale connection
-	if oldConn, exists := s.tcpConns[deviceId]; exists && oldConn != conn {
-		oldConn.Close()
+	var oldConn net.Conn
+
+	// 1. ตรวจสอบว่ามี Connection เดิมอยู่หรือไม่ และไม่ใช่ Socket ตัวเดิม
+	if existing, exists := s.tcpConns[deviceId]; exists && existing != conn {
+		oldConn = existing
 	}
+
+	// 2. บันทึก Socket ตัวใหม่เข้าไปแทนที่
 	s.tcpConns[deviceId] = conn
+	s.mu.Unlock() // ปล่อย Mutex ทันทีเพื่อไม่ให้ระบบภาพรวมติดขัด
+
+	// 3. หากมี Connection เก่า ให้ส่งข้อความแจ้งเตือนและปิดสายแบบ Asynchronous
+	if oldConn != nil {
+		go func(c net.Conn, id int) {
+			defer c.Close()
+
+			// ตั้งเวลาจำกัด (Timeout) ไว้ 1 วินาที ป้องกันกรณี Socket ค้าง
+			_ = c.SetWriteDeadline(time.Now().Add(1 * time.Second))
+
+			// ใช้ fmt.Appendf ตามคำแนะนำการ Optimize ของ Go
+			msg := fmt.Appendf(nil, "DISCONNECTED: session replaced by new connection for device ID %d\n", id)
+
+			if _, err := c.Write(msg); err != nil {
+				slog.Debug("Failed to send disconnect reason to old TCP socket",
+					slog.Int("deviceId", id),
+					slog.String("error", err.Error()),
+				)
+			}
+		}(oldConn, deviceId)
+	}
 }
 
 func (s *sessionManagerService) UnregisterTCP(deviceId int, conn net.Conn) {
@@ -86,8 +110,33 @@ func (s *sessionManagerService) UnregisterTCP(deviceId int, conn net.Conn) {
 
 func (s *sessionManagerService) RegisterUDP(deviceId int, addr *net.UDPAddr) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+
+	// 1. ดึง IP/Port เดิมออกมาก่อน (ถ้ามี)
+	oldAddr, exists := s.udpAddrs[deviceId]
+
+	// 2. ดึง instance ของ UDP server ออกมาเพื่อใช้ส่งข้อมูล
+	server := s.udpServer
+
+	// 3. บันทึก IP/Port ใหม่ทับลงไป
 	s.udpAddrs[deviceId] = addr
+
+	s.mu.Unlock() // ปล่อย Lock ให้เร็วที่สุด
+
+	// 4. หากเคยมี IP/Port เดิม และไม่ใช่ IP/Port ตัวเดียวกันกับปัจจุบัน ให้ส่งข้อความแจ้งเตือน
+	if exists && oldAddr != nil && server != nil && oldAddr.String() != addr.String() {
+		go func(target *net.UDPAddr, id int) {
+			// สร้างข้อความด้วย fmt.Appendf เพื่อประสิทธิภาพ
+			msg := fmt.Appendf(nil, "DISCONNECTED: session replaced by new UDP address for device ID %d\n", id)
+
+			// ยิง UDP Packet ไปหา IP/Port เก่า
+			if _, err := server.WriteToUDP(msg, target); err != nil {
+				slog.Debug("Failed to send disconnect reason to old UDP address",
+					slog.Int("deviceId", id),
+					slog.String("error", err.Error()),
+				)
+			}
+		}(oldAddr, deviceId)
+	}
 }
 
 func (s *sessionManagerService) MarkDeviceActive(deviceId int) {
@@ -174,26 +223,57 @@ func (s *sessionManagerService) routeTCP(ctx context.Context, req *model.Gateway
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	for _, cmd := range req.Payload {
-		id, err := s.cacheSvc.GetDeviceIdByName(ctx, cmd.DeviceName)
-		if err != nil || id <= 0 {
-			slog.Warn("Unknown device in TCP payload routing", slog.String("device", cmd.DeviceName))
-			continue
+	// ⚡ 1. ใช้ Map เพื่อกรองการเชื่อมต่อที่ซ้ำกัน (Deduplication สำหรับ Gateway)
+	targetConns := make(map[net.Conn]bool)
+	var devicesToNotify []int
+
+	// ⚡ 2. ค้นหาเป้าหมาย (รองรับทั้ง Group และ Single)
+	if req.GroupId > 0 {
+		groupName, err := s.repo.GetDeviceGroupNameById(ctx, req.GroupId)
+		if err == nil && groupName != "" {
+			// ใช้ฟังก์ชันที่คุณสร้างไว้ในรอบที่แล้ว
+			deviceIds, _, _ := s.cacheSvc.GetGroupInfoByName(ctx, groupName)
+			devicesToNotify = append(devicesToNotify, deviceIds...)
 		}
-
-		conn, exists := s.tcpConns[id]
-		if !exists {
-			slog.Warn("Device offline or TCP connection missing", slog.Int("deviceId", id))
-			continue
-		}
-
-		cmdBytes, _ := json.Marshal(cmd)
-		cmdBytes = append(cmdBytes, '\n')
-
-		if _, err := conn.Write(cmdBytes); err != nil {
-			slog.Error("Failed to write to TCP connection", slog.Int("deviceId", id), slog.String("err", err.Error()))
+	} else if req.DeviceId > 0 {
+		devicesToNotify = append(devicesToNotify, req.DeviceId)
+	} else {
+		// Fallback กลับไปอ่านจาก Payload หากไม่ได้ระบุ ID มา
+		for _, cmd := range req.Payload {
+			id, _, _ := s.cacheSvc.GetDeviceInfoByName(ctx, cmd.DeviceName)
+			if id > 0 {
+				devicesToNotify = append(devicesToNotify, id)
+			}
 		}
 	}
+
+	// ⚡ 3. รวบรวม Socket (net.Conn) ที่ใช้งานอยู่จริงของอุปกรณ์ทั้งหมด
+	for _, id := range devicesToNotify {
+		if conn, exists := s.tcpConns[id]; exists {
+			targetConns[conn] = true
+		}
+	}
+
+	if len(targetConns) == 0 {
+		slog.Warn("No active TCP connections found for routing")
+		return nil
+	}
+
+	// แปลงข้อมูลคำสั่งเป็น JSON
+	cmdBytes, err := json.Marshal(req.Payload)
+	if err != nil {
+		return err
+	}
+	cmdBytes = append(cmdBytes, '\n') // ปิดท้ายด้วย Newline สำหรับ TCP
+
+	// ⚡ 4. ส่งคำสั่งไปยังแต่ละ Socket (Gateway จะได้รับแค่ 1 ครั้งแม้จะดูแลอุปกรณ์ 10 ตัวก็ตาม)
+	for conn := range targetConns {
+		if _, err := conn.Write(cmdBytes); err != nil {
+			slog.Error("Failed to write to TCP connection", slog.String("err", err.Error()))
+		}
+	}
+
+	slog.InfoContext(ctx, "Routed command via TCP", slog.Int("connections_sent", len(targetConns)))
 	return nil
 }
 
@@ -209,22 +289,55 @@ func (s *sessionManagerService) routeUDP(ctx context.Context, req *model.Gateway
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	for _, cmd := range req.Payload {
-		id, err := s.cacheSvc.GetDeviceIdByName(ctx, cmd.DeviceName)
-		if err != nil || id <= 0 {
-			continue
-		}
+	// 1. ใช้ Map เพื่อกรอง IP/Port ที่ซ้ำกัน (Deduplication สำหรับ UDP Gateway)
+	targetAddrs := make(map[string]*net.UDPAddr)
+	var devicesToNotify []int
 
-		addr, exists := s.udpAddrs[id]
-		if !exists {
-			continue
+	// 2. ค้นหาเป้าหมาย (รองรับทั้ง Group และ Single เหมือน TCP)
+	if req.GroupId > 0 {
+		groupName, err := s.repo.GetDeviceGroupNameById(ctx, req.GroupId)
+		if err == nil && groupName != "" {
+			deviceIds, _, _ := s.cacheSvc.GetGroupInfoByName(ctx, groupName)
+			devicesToNotify = append(devicesToNotify, deviceIds...)
 		}
-
-		cmdBytes, _ := json.Marshal(cmd)
-		if _, err := server.WriteToUDP(cmdBytes, addr); err != nil {
-			slog.Error("Failed to write to UDP", slog.Int("deviceId", id), slog.String("err", err.Error()))
+	} else if req.DeviceId > 0 {
+		devicesToNotify = append(devicesToNotify, req.DeviceId)
+	} else {
+		// Fallback กลับไปอ่านจาก Payload
+		for _, cmd := range req.Payload {
+			id, _, _ := s.cacheSvc.GetDeviceInfoByName(ctx, cmd.DeviceName)
+			if id > 0 {
+				devicesToNotify = append(devicesToNotify, id)
+			}
 		}
 	}
+
+	// 3. รวบรวมที่อยู่ (UDPAddr) ที่ใช้งานอยู่จริงของอุปกรณ์ทั้งหมด
+	for _, id := range devicesToNotify {
+		if addr, exists := s.udpAddrs[id]; exists {
+			// ใช้ addr.String() เป็น Key เพื่อกรอง IP:Port ที่ซ้ำกัน
+			targetAddrs[addr.String()] = addr
+		}
+	}
+
+	if len(targetAddrs) == 0 {
+		slog.Warn("No active UDP addresses found for routing")
+		return nil
+	}
+
+	cmdBytes, err := json.Marshal(req.Payload)
+	if err != nil {
+		return err
+	}
+
+	// 4. ยิงคำสั่งไปยังแต่ละ IP/Port (Gateway จะได้รับแค่ 1 ครั้ง)
+	for _, addr := range targetAddrs {
+		if _, err := server.WriteToUDP(cmdBytes, addr); err != nil {
+			slog.Error("Failed to write to UDP", slog.String("err", err.Error()))
+		}
+	}
+
+	slog.InfoContext(ctx, "Routed command via UDP", slog.Int("addresses_sent", len(targetAddrs)))
 	return nil
 }
 
@@ -233,7 +346,7 @@ func (s *sessionManagerService) routeHTTP(ctx context.Context, req *model.Gatewa
 	defer s.mu.Unlock()
 
 	for _, cmd := range req.Payload {
-		id, err := s.cacheSvc.GetDeviceIdByName(ctx, cmd.DeviceName)
+		id, _, err := s.cacheSvc.GetDeviceInfoByName(ctx, cmd.DeviceName)
 		if err != nil || id <= 0 {
 			continue
 		}

@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS device_rule_notification (
     rule_id SERIAL,
     device_id INT NOT NULL,
     condition TEXT NOT NULL, -- e.g., '>', '<', '==', '>=', '<='
-    threshold INT NOT NULL,
+    threshold DOUBLE PRECISION NOT NULL,
     reason TEXT,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

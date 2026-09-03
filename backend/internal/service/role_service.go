@@ -130,3 +130,57 @@ func (s *roleService) GetDetailById(ctx context.Context, roleId int) (*model.Rol
 
 	return detail, nil
 }
+
+func (s *roleService) DeleteRole(ctx context.Context, roleId int, authUserId int) error {
+	const fname = "DeleteRole"
+
+	// 1. Business Logic: Prevent deletion if users are assigned
+	userCount, err := s.roleRepo.CountUsersByRoleId(ctx, roleId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	if userCount > 0 {
+		return fmt.Errorf("Cannot delete this role because %d user(s) are currently assigned to it. %w", userCount, model.ErrInUsed)
+	}
+
+	// 2. Start Transaction for atomicity
+	tx, err := s.txManager.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+	defer tx.Rollback(ctx)
+
+	// 3. Delete Permissions first to satisfy database foreign key constraints
+	err = s.roleRepo.DeleteAllRolePermissions(tx.Context(), roleId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	// 4. Delete the Role
+	err = s.roleRepo.DeleteRole(tx.Context(), roleId)
+	if err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	// 5. Create Audit Log
+	audit := model.AuditLog{
+		EntityType: "role",
+		EntityId:   strconv.Itoa(roleId),
+		Action:     "DELETE", // Ensure this string matches your model's standard
+		ChangedBy:  authUserId,
+		OldData:    nil,
+		NewData:    nil,
+	}
+
+	if err = s.auditLogRepo.Create(tx.Context(), []model.AuditLog{audit}); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	// 6. Commit Transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
+	}
+
+	return nil
+}

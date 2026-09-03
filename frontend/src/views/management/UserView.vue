@@ -1,7 +1,8 @@
 <template>
   <div v-if="hasPermission('User', 'Display')" class="w-full mx-auto p-4">
     <!-- Page Header Card -->
-    <div class="bg-base-100 shadow-sm rounded-box border border-base-200 p-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div
+      class="bg-base-100 shadow-sm rounded-box border border-base-200 p-6 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div class="flex items-center gap-4">
         <div class="p-3 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
           <Icon icon="lucide:users" class="w-7 h-7" />
@@ -14,7 +15,8 @@
     </div>
 
     <!-- Users Table -->
-    <TableData :data="userTable" :columns="tableColumns" :initial-sorting="[{ id: 'userId', desc: false }]" :is-loading="isLoading">
+    <TableData :data="userTable" :columns="tableColumns" :initial-sorting="[{ id: 'userId', desc: false }]"
+      :is-loading="isLoading">
       <template #toolbar-actions>
         <button class="btn btn-primary shadow-sm hover:shadow-md transition-all" @click="openCreateModal">
           <Icon icon="lucide:plus" class="w-5 h-5" />
@@ -44,7 +46,7 @@
             <Icon icon="lucide:pencil" class="w-5 h-5" />
           </button>
           <button @click="openDeleteModal(row)" class="btn btn-sm btn-error text-white">
-            <Icon icon="lucide:trash" class="w-5 h-5" />
+            <Icon icon="lucide:trash-2" class="w-5 h-5" />
           </button>
         </div>
       </template>
@@ -66,21 +68,31 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-1">
             <!-- First Name -->
             <label class="form-control w-full">
-              <div class="label pb-1"><span class="label-text font-semibold">{{ $t('user.firstName') }}</span></div>
-              <input type="text" v-model="form.firstName" placeholder="Jane" @blur="v$.firstName.$touch()"
+              <div class="label pb-1 flex justify-between">
+                <span class="label-text font-semibold">{{ $t('user.firstName') }}</span>
+                <span class="label-text-alt text-base-content/60 font-mono">{{ form.firstName?.length || 0 }}/50</span>
+              </div>
+              <input type="text" v-model="form.firstName" maxlength="50" placeholder="Jane"
+                @blur="v$.firstName.$touch()"
                 :class="['input input-bordered w-full', { 'input-error': v$.firstName.$error }]" />
               <div class="label px-1 py-1 h-6">
-                <span v-if="v$.firstName.$error" class="label-text-alt text-error font-medium">{{ v$.firstName.$errors[0].$message }}</span>
+                <span v-if="v$.firstName.$error" class="label-text-alt text-error font-medium">
+                  {{ v$.firstName.$errors[0].$message }}
+                </span>
               </div>
             </label>
 
             <!-- Last Name -->
             <label class="form-control w-full">
-              <div class="label pb-1"><span class="label-text font-semibold">{{ $t('user.lastName') }}</span></div>
-              <input type="text" v-model="form.lastName" placeholder="Doe" @blur="v$.lastName.$touch()"
+              <div class="label pb-1 flex justify-between">
+                <span class="label-text font-semibold">{{ $t('user.lastName') }}</span>
+                <span class="label-text-alt text-base-content/60 font-mono">{{ form.lastName?.length || 0 }}/50</span>
+              </div>
+              <input type="text" v-model="form.lastName" maxlength="50" placeholder="Doe" @blur="v$.lastName.$touch()"
                 :class="['input input-bordered w-full', { 'input-error': v$.lastName.$error }]" />
               <div class="label px-1 py-1 h-6">
-                <span v-if="v$.lastName.$error" class="label-text-alt text-error font-medium">{{ v$.lastName.$errors[0].$message }}</span>
+                <span v-if="v$.lastName.$error" class="label-text-alt text-error font-medium">{{
+                  v$.lastName.$errors[0].$message }}</span>
               </div>
             </label>
 
@@ -90,7 +102,9 @@
               <input type="email" v-model="form.email" placeholder="jane@example.com" @blur="v$.email.$touch()"
                 :class="['input input-bordered w-full', { 'input-error': v$.email.$error }]" />
               <div class="label px-1 py-1 h-6">
-                <span v-if="v$.email.$error" class="label-text-alt text-error font-medium">{{ v$.email.$errors[0].$message }}</span>
+                <span v-if="v$.email.$error" class="label-text-alt text-error font-medium">{{
+                  v$.email.$errors[0].$message
+                }}</span>
               </div>
             </label>
 
@@ -103,15 +117,19 @@
 
             <!-- Username -->
             <label class="form-control w-full sm:col-span-2">
-              <div class="label pb-1">
-                <span class="label-text font-semibold">{{ $t('user.username') }}</span>
-                <span v-if="isEditing" class="badge badge-neutral badge-sm">{{ $t('common.readOnly') }}</span>
+              <div class="label pb-1 flex justify-between items-end">
+                <div>
+                  <span class="label-text font-semibold">{{ $t('user.username') }}</span>
+                  <span v-if="isEditing" class="badge badge-neutral badge-sm ml-2">{{ $t('common.readOnly') }}</span>
+                </div>
+                <span class="label-text-alt text-base-content/60 font-mono">{{ form.username?.length || 0 }}/31</span>
               </div>
-              <input type="text" v-model="form.username" placeholder="jdoe" @blur="v$.username.$touch()"
+              <input type="text" v-model="form.username" maxlength="31" placeholder="jdoe" @blur="v$.username.$touch()"
                 :disabled="isEditing" autocomplete="none"
                 :class="['input input-bordered w-full disabled:bg-base-200/50 disabled:text-base-content/60', { 'input-error': v$.username.$error }]" />
               <div class="label px-1 py-1 h-6">
-                <span v-if="v$.username.$error" class="label-text-alt text-error font-medium">{{ v$.username.$errors[0].$message }}</span>
+                <span v-if="v$.username.$error" class="label-text-alt text-error font-medium">
+                  {{ v$.username.$errors[0].$message }}</span>
               </div>
             </label>
 
@@ -121,11 +139,12 @@
                 <span class="label-text font-semibold">{{ $t('user.password') }}</span>
                 <span v-if="isEditing" class="label-text-alt text-info font-medium">{{ $t('user.passwordHint') }}</span>
               </div>
-              <input type="password" v-model="form.password" @blur="v$.password.$touch()"
-                placeholder="••••••••" autocomplete="new-password" spellcheck="false"
+              <input type="password" v-model="form.password" @blur="v$.password.$touch()" placeholder="••••••••"
+                autocomplete="new-password" spellcheck="false"
                 :class="['input input-bordered w-full', { 'input-error': v$.password.$error }]" />
               <div class="label px-1 py-1 h-6">
-                <span v-if="v$.password.$error" class="label-text-alt text-error font-medium">{{ v$.password.$errors[0].$message }}</span>
+                <span v-if="v$.password.$error" class="label-text-alt text-error font-medium">{{
+                  v$.password.$errors[0].$message }}</span>
               </div>
             </label>
           </div>
@@ -137,9 +156,12 @@
               <span class="label-text-alt text-error">*</span>
             </div>
             <SearchableDropdown v-model="form.roleId" :options="Array.from(rolesMaster.values())" label-key="roleName"
-              value-key="roleId" :placeholder="$t('common.searchRole')" :error="v$.roleId.$error" @blur="v$.roleId.$touch()" />
+              value-key="roleId" :placeholder="$t('common.searchRole')" :error="v$.roleId.$error"
+              @blur="v$.roleId.$touch()" />
             <div class="label px-1 py-1 h-6">
-              <span v-if="v$.roleId.$error" class="label-text-alt text-error font-medium">{{ v$.roleId.$errors[0].$message }}</span>
+              <span v-if="v$.roleId.$error" class="label-text-alt text-error font-medium">{{
+                v$.roleId.$errors[0].$message
+              }}</span>
             </div>
           </label>
 
@@ -194,13 +216,15 @@ import { useI18n } from 'vue-i18n';
 import { useMutation } from '@/composables/useMutation';
 import { useFetch } from '@/composables/useFetch';
 import { useVuelidate } from '@vuelidate/core';
-import { required, requiredIf, minLength, email, helpers } from '@vuelidate/validators';
+import { required, requiredIf, minLength, maxLength, email, helpers } from '@vuelidate/validators';
 import { toast } from 'vue3-toastify';
 import { Icon } from '@iconify/vue';
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import NoAccess from '@/components/NoAccess.vue';
 import SearchableDropdown from '@/components/SearchableDropdown.vue';
 import TableData from '@/components/TableData.vue';
+import { useErrorHandler } from '@/composables/useErrorHandler';
+const { handleError } = useErrorHandler();
 
 const { t } = useI18n();
 
@@ -243,12 +267,19 @@ const form = ref({
 });
 
 const rules = computed(() => ({
-  firstName: { required: helpers.withMessage(t('user.validation.firstNameRequired'), required) },
-  lastName: { required: helpers.withMessage(t('user.validation.lastNameRequired'), required) },
+  firstName: {
+    required: helpers.withMessage(t('user.validation.firstNameRequired'), required),
+    maxLength: helpers.withMessage(t('common.validation.maxLength', { len: 50 }), maxLength(50))
+  },
+  lastName: {
+    required: helpers.withMessage(t('user.validation.lastNameRequired'), required),
+    maxLength: helpers.withMessage(t('common.validation.maxLength', { len: 50 }), maxLength(50))
+  },
   email: { email: helpers.withMessage(t('user.validation.emailInvalid'), email) },
   username: {
     required: helpers.withMessage(t('user.validation.usernameRequired'), required),
-    minLength: helpers.withMessage(t('user.validation.usernameMin'), minLength(4))
+    minLength: helpers.withMessage(t('user.validation.usernameMin'), minLength(4)),
+    maxLength: helpers.withMessage(t('common.validation.maxLength', { len: 31 }), maxLength(31))
   },
   password: {
     required: helpers.withMessage(t('user.validation.passwordRequired'), requiredIf(() => !isEditing.value)),
@@ -295,7 +326,7 @@ const confirmDelete = async () => {
     await loadTable();
     closeDeleteModal();
   } else {
-    toast.error(userDeletedError.value?.message || t('common.messages.deleteError'));
+    toast.error(handleError(userDeletedError, 'common.messages.deleteError'));
   }
 };
 
@@ -345,7 +376,7 @@ const submitForm = async () => {
       closeModal();
       toast.success(t('common.messages.updated'));
     } else {
-      toast.error(userUpdatedError.value?.message || t('common.messages.updateError'));
+      toast.error(handleError(userUpdatedError, 'common.messages.updateError'));
     }
   } else {
     await userAddedApi('/user/create', form.value, 'POST');
@@ -354,7 +385,7 @@ const submitForm = async () => {
       closeModal();
       toast.success(t('common.messages.created'));
     } else {
-      toast.error(userAddedError.value.message || t('common.messages.createError'));
+      toast.error(handleError(userAddedError, 'common.messages.createError'));
     }
   }
 };

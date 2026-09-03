@@ -88,6 +88,7 @@
     "timeRange": "Time Range",
     "from": "From",
     "to": "To",
+    "deleteWarning": "Are you sure you want to remove",
     "timeRanges": {
       "live": "Live Data Only",
       "m15": "Last 15 Minutes",
@@ -113,6 +114,12 @@
     "enableOverrides": "Enable Device Overrides",
     "deviceOverridesOptional": "Device Overrides (Optional)",
     "noDevicesAssigned": "No devices currently assigned to this group.",
+    "display": "Display",
+    "update": "Update",
+    "query": "Query",
+    "validation": {
+      "maxLength": "Maximum {len} characters allowed"
+    },
     "messages": {
       "createSuccess": "{item} created successfully!",
       "updateSuccess": "{item} updated successfully!",
@@ -131,7 +138,10 @@
       "loadError": "Failed to load.",
       "createError": "Failed to create.",
       "updateError": "Failed to update.",
-      "deleteError": "Failed to delete."
+      "deleteError": "Failed to delete.",
+      "duplicateError": "Duplicate Data {item}",
+      "noAccessError": "No Access",
+      "deleteFailedInUsed": "Failed to delete has in used: {item}"
     }
   },
   "role": {
@@ -190,8 +200,7 @@
     "assignDevicesDesc": "Select multiple devices",
     "deleteWarning": "Delete the group \"{name}\"? This will not delete the devices inside it, only the grouping.",
     "validation": {
-      "groupNameRequired": "Group name is required",
-      "maxLength": "Maximum 31 characters allowed"
+      "groupNameRequired": "Group name is required"
     }
   },
   "device": {
@@ -321,7 +330,7 @@
     "targetType": "Target Type",
     "selectTargetDevice": "Select Target Device",
     "selectTargetGroup": "Select Target Group",
-    "taskCommand": "Task / Action Command",
+    "taskCommand": "Task / Value",
     "taskCommandPlaceholder": "e.g., reboot, 0, 1",
     "scheduleType": "Schedule Type",
     "oneTimeEvent": "One-Time Event",
@@ -344,9 +353,19 @@
     "selectStartTime": "Select Start Date & Time",
     "saving": "Saving...",
     "saveSchedule": "Save Schedule",
+    "customTime": "Custom Schedule",
+    "customTimeHint": "Select time and active days",
+    "advanced": "Advanced",
+    "cronParts": {
+      "minute": "Minute",
+      "hour": "Hour",
+      "day": "Day",
+      "month": "Month",
+      "week": "Week"
+    },
     "table": {
       "target": "Target",
-      "taskAction": "Task / Action",
+      "taskAction": "Task / Command",
       "type": "Type",
       "startTime": "Start Time"
     },
@@ -447,6 +466,9 @@
     "deleteCanvas": "Delete Canvas",
     "deleteWarning": "Are you sure you want to delete \"{name}\"?",
     "deleteWarningDesc": "This action cannot be undone and will remove all widgets configured on this canvas.",
+    "validation": {
+      "canvasNameRequired": "Canvas name is required"
+    },
     "messages": {
       "renameSuccess": "Canvas renamed successfully!"
     }
@@ -476,7 +498,9 @@
   },
   "searchableDropdown": {
     "noResults": "No results found for \"{query}\"",
-    "searchPlaceholder": "Search..."
+    "searchPlaceholder": "Search...",
+    "selectAll": "Select All",
+    "clearAll": "Clear All"
   },
   "tableData": {
     "searchPlaceholder": "Search all columns...",
@@ -832,7 +856,9 @@
       "noDevicesWarning": "Warning: You must select at least one device in the General Settings tab to see the overlay!"
     },
     "messages": {
-      "uploadFailed": "Image upload failed."
+      "uploadFailed": "Image upload failed.",
+      "fileTooLarge": "Image upload more than 10 MB.",
+      "fileNotAllowed": "Only image files (PNG, JPG, GIF, WEBP) are allowed."
     }
   }
 }

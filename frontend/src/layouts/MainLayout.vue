@@ -3,13 +3,14 @@
 
     <!-- Header -->
     <header class="navbar bg-neutral text-neutral-content sticky top-0 z-[100] px-4 shadow-md h-[60px]">
-      
+
       <div class="flex-1 flex items-center justify-start gap-2">
         <label for="main-drawer" class="btn btn-square btn-ghost cursor-pointer text-white hover:bg-white/20">
           <Icon icon="lucide:menu" class="w-6 h-6" />
         </label>
-        
-        <router-link to="/" class="btn btn-ghost text-2xl font-bold normal-case text-white hover:bg-white/20 flex items-center gap-3">
+
+        <router-link to="/"
+          class="btn btn-ghost text-2xl font-bold normal-case text-white hover:bg-white/20 flex items-center gap-3">
           <img src="/LOGO_FT.png" alt="Logo" class="w-8 h-8 rounded bg-white/10 p-1 shadow-sm" />
           <span>{{ $t('header.brand') }}</span>
         </router-link>
@@ -24,7 +25,7 @@
           <Icon icon="lucide:log-out" class="w-4 h-4 mr-1" /> {{ $t('header.logout') }}
         </button>
       </div>
-      
+
     </header>
 
     <div class="drawer flex-1 relative overflow-hidden">
@@ -39,10 +40,10 @@
         <label for="main-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
 
         <div class="flex flex-col w-[280px] min-h-full bg-base-100 border-r border-base-200">
-          
+
           <!-- Menu Items -->
           <ul class="menu p-4 text-base-content text-lg font-medium gap-2 flex-1">
-            
+
             <li>
               <router-link :to="{ name: 'dashboard' }" active-class="!text-primary !bg-primary/10 font-bold"
                 @click="isSidebarOpen = false" class="py-3 px-4 rounded-xl flex items-center gap-3">
@@ -51,7 +52,8 @@
               </router-link>
             </li>
 
-            <li v-if="hasPermission('Canvas Design', 'Display') || hasPermission('Canvas Access', 'Display') || hasPermission('Canvas', 'Display')">
+            <li
+              v-if="hasPermission('Canvas Design', 'Display') || hasPermission('Canvas Access', 'Display') || hasPermission('Canvas', 'Display')">
               <details>
                 <summary class="py-3 px-4 rounded-xl flex items-center gap-3">
                   <Icon icon="lucide:layout-list" class="w-5 h-5 opacity-70" />
@@ -119,7 +121,8 @@
               </router-link>
             </li>
 
-            <li v-if="hasPermission('User', 'Display') || hasPermission('Role', 'Display') || hasPermission('Device', 'Display') || hasPermission('Device Group', 'Display')">
+            <li
+              v-if="hasPermission('User', 'Display') || hasPermission('Role', 'Display') || hasPermission('Device', 'Display') || hasPermission('Device Group', 'Display')">
               <details>
                 <summary class="py-3 px-4 rounded-xl flex items-center gap-3">
                   <Icon icon="lucide:settings" class="w-5 h-5 opacity-70" />
@@ -157,25 +160,19 @@
 
           <!-- Sidebar Footer (Theme & Language Toggles) -->
           <div class="p-4 border-t border-base-200 bg-base-100/50 flex flex-col gap-4">
-            
+
             <!-- Language Toggle -->
             <div class="flex items-center justify-between px-2">
               <span class="text-sm font-semibold text-base-content/70 flex items-center gap-2">
                 <Icon icon="lucide:globe" class="w-4 h-4" /> {{ $t('settings.language') }}
               </span>
               <div class="join bg-base-200 border border-base-300">
-                <button 
-                  type="button"
-                  class="btn btn-sm join-item border-none" 
-                  :class="locale === 'en' ? 'btn-primary' : 'btn-ghost'"
-                  @click="setLanguage('en')">
+                <button type="button" class="btn btn-sm join-item border-none"
+                  :class="locale === 'en' ? 'btn-primary' : 'btn-ghost'" @click="setLanguage('en')">
                   EN
                 </button>
-                <button 
-                  type="button"
-                  class="btn btn-sm join-item border-none" 
-                  :class="locale === 'th' ? 'btn-primary' : 'btn-ghost'"
-                  @click="setLanguage('th')">
+                <button type="button" class="btn btn-sm join-item border-none"
+                  :class="locale === 'th' ? 'btn-primary' : 'btn-ghost'" @click="setLanguage('th')">
                   TH
                 </button>
               </div>
@@ -184,10 +181,11 @@
             <!-- Theme Toggle -->
             <div class="flex items-center justify-between px-2">
               <span class="text-sm font-semibold text-base-content/70 flex items-center gap-2">
-                <Icon :icon="isDarkTheme ? 'lucide:moon' : 'lucide:sun'" class="w-4 h-4" /> {{ $t('settings.theme') }}
+                <Icon :icon="themeStore.isDarkTheme ? 'lucide:moon' : 'lucide:sun'" class="w-4 h-4" /> {{ $t('settings.theme') }}
               </span>
               <label class="swap swap-rotate btn btn-sm btn-circle btn-ghost bg-base-200 border border-base-300">
-                <input type="checkbox" v-model="isDarkTheme" @change="toggleTheme" />
+                <!-- อัปเดตให้ผูกกับ Store โดยตรง -->
+                <input type="checkbox" v-model="themeStore.isDarkTheme" />
                 <Icon icon="lucide:sun" class="swap-off w-4 h-4 text-warning" />
                 <Icon icon="lucide:moon" class="swap-on w-4 h-4 text-info" />
               </label>
@@ -209,6 +207,7 @@ import { Icon } from '@iconify/vue';
 import { useMutation } from '@/composables/useMutation';
 import { usePermissionStore } from '@/stores/usePermissionStore';
 import { useUserStore } from '@/stores/useUserStore';
+import { useThemeStore } from '@/stores/useThemeStore';
 
 // --- ROUTER & I18N ---
 const router = useRouter();
@@ -216,34 +215,25 @@ const { locale } = useI18n();
 
 // --- STATE ---
 const isSidebarOpen = ref(false);
-const isDarkTheme = ref(false);
 
 // --- STORES ---
 const permissionStore = usePermissionStore();
 const { hasPermission, setPermissions } = permissionStore;
 const userStore = useUserStore();
 const { setUser } = userStore;
+const themeStore = useThemeStore();
 
 const { res: logoutRes, execute: logoutApi } = useMutation();
 
 // --- INITIALIZATION ---
 onMounted(() => {
-  // 1. Load Theme
-  const savedTheme = localStorage.getItem('theme') || 'light';
-  isDarkTheme.value = savedTheme === 'dark';
-  document.documentElement.setAttribute('data-theme', savedTheme);
 
-  // 2. Load Language
+  // Load Language
   const savedLang = localStorage.getItem('lang') || 'en';
   locale.value = savedLang;
 });
 
 // --- METHODS ---
-const toggleTheme = () => {
-  const newTheme = isDarkTheme.value ? 'dark' : 'light';
-  document.documentElement.setAttribute('data-theme', newTheme);
-  localStorage.setItem('theme', newTheme);
-};
 
 const setLanguage = (lang) => {
   locale.value = lang;

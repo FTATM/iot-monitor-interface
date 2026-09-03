@@ -122,21 +122,3 @@ func (s *deviceGatewayService) UpdateDeviceLastSeen(ctx context.Context, deviceI
 	}
 	return nil
 }
-
-func (s *deviceGatewayService) GetDeviceIdByName(ctx context.Context, deviceName string) (int, error) {
-	const fname = "GetDeviceIdByName"
-	deviceId, err := s.repo.GetDeviceIdByName(ctx, deviceName)
-	if err != nil {
-		return 0, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
-	}
-	return deviceId, nil
-}
-
-func (s *deviceGatewayService) GetDeviceIdByGroupName(ctx context.Context, deviceName string) ([]model.DeviceGroupData, error) {
-	const fname = "GetDeviceIdByGroupName"
-	deviceGroupName, err := s.repo.GetDeviceIdByGroupName(ctx, deviceName)
-	if err != nil {
-		return nil, fmt.Errorf("[%s]>[%s]: %w", s.prefixError, fname, err)
-	}
-	return deviceGroupName, nil
-}

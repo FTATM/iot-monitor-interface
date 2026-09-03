@@ -177,7 +177,7 @@ func (r *userRepo) Delete(ctx context.Context, userId int) error {
 			UPDATE "user"
 			SET 
 				active = false,
-				deleted_at = CURRENT_TIMESTAMP
+				deleted_at = now()
 			WHERE user_id = $1
 		`
 	result, err := r.db(ctx).Exec(ctx, query, userId)

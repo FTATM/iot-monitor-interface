@@ -45,6 +45,8 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useLiveStreamStore } from '@/stores/useLiveStreamStore';
+import { useFormatter } from '@/composables/useFormatter';
+const { formatTime } = useFormatter();
 
 const { t } = useI18n();
 
@@ -101,9 +103,7 @@ watch(() => liveStreamStore.liveData, (newData) => {
   const hasIncomingData = rawDeviceIds.some(id => newData[String(id)] !== undefined);
   if (!hasIncomingData) return;
 
-  const timeStr = new Date().toLocaleTimeString(undefined, {
-    hour12: !config.value.use24HourFormat, hour: '2-digit', minute: '2-digit', second: '2-digit'
-  });
+  const timeStr = formatTime(new Date());
 
   const newRow = {};
   if (config.value.showTimeColumn) {

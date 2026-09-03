@@ -13,6 +13,7 @@ type DeviceDataPayloadReq struct {
 
 type DeviceData struct {
 	DeviceId   int       `json:"deviceId" db:"device_id"`
+	DeviceName string    `json:"deviceName" db:"-"`
 	ValueData  int       `json:"valueData" db:"value_data"`
 	ReceivedAt time.Time `json:"-"`
 }
@@ -32,7 +33,7 @@ type DeviceCommand struct {
 type DeviceGatewayRepository interface {
 	BulkUpsertDeviceData(ctx context.Context, data []DeviceData) error
 	UpdateLastSeen(ctx context.Context, deviceId int) error
-	GetDeviceIdByName(ctx context.Context, deviceName string) (int, error)
+	GetDeviceInfoByName(ctx context.Context, deviceName string) (int, string, error)
 	GetDeviceIdByGroupName(ctx context.Context, deviceName string) ([]DeviceGroupData, error)
 	GetDeviceNameById(ctx context.Context, deviceId int) (string, error)
 	GetDeviceGroupNameById(ctx context.Context, groupId int) (string, error)
@@ -43,8 +44,6 @@ type DeviceGatewayService interface {
 	Start(ctx context.Context) error
 	Stop()
 	UpdateDeviceLastSeen(ctx context.Context, deviceId int) error
-	GetDeviceIdByName(ctx context.Context, deviceName string) (int, error)
-	GetDeviceIdByGroupName(ctx context.Context, groupName string) ([]DeviceGroupData, error)
 }
 
 type DeviceGatewayClient interface {

@@ -5,8 +5,8 @@
     <div
       class="bg-base-100 shadow-sm rounded-box border border-base-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
       <div class="flex items-center gap-4">
-        <div class="p-3 bg-neutral/10 text-neutral rounded-xl flex items-center justify-center">
-          <Icon icon="lucide:scroll-text" class="w-7 h-7" />
+        <div class="p-3 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
+          <Icon icon="lucide:file-text" class="w-7 h-7" />
         </div>
         <div>
           <h2 class="m-0 text-2xl font-extrabold text-base-content tracking-tight">{{ $t('logReport.title') }}</h2>
@@ -38,9 +38,11 @@
       <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
 
         <label class="form-control w-full">
-          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('logReport.selectStartDate') }}</span></div>
+          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('logReport.selectStartDate') }}</span>
+          </div>
           <VueDatePicker v-model="filters.from" :is-24="true" auto-apply :preset-dates="presetDates"
-            format="yyyy-MM-dd HH:mm" :placeholder="$t('logReport.selectStartDate')" teleport-center>
+            :dark="themeStore.isDarkTheme" format="yyyy-MM-dd HH:mm" :placeholder="$t('logReport.selectStartDate')"
+            teleport-center>
             <template #input-icon>
               <Icon icon="lucide:calendar-clock" class="w-5 h-5 ml-3 text-base-content/50" />
             </template>
@@ -48,9 +50,11 @@
         </label>
 
         <label class="form-control w-full">
-          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('logReport.selectEndDate') }}</span></div>
+          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('logReport.selectEndDate') }}</span>
+          </div>
           <VueDatePicker v-model="filters.to" :is-24="true" auto-apply :preset-dates="presetDates"
-            format="yyyy-MM-dd HH:mm" :placeholder="$t('logReport.selectEndDate')" teleport-center>
+            :dark="themeStore.isDarkTheme" format="yyyy-MM-dd HH:mm" :placeholder="$t('logReport.selectEndDate')"
+            teleport-center>
             <template #input-icon>
               <Icon icon="lucide:calendar-clock" class="w-5 h-5 ml-3 text-base-content/50" />
             </template>
@@ -64,7 +68,8 @@
         </label>
 
         <label class="form-control w-full" :class="{ 'md:col-span-2': activeTab !== 'system' }">
-          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('logReport.keywordSearch') }}</span></div>
+          <div class="label pb-1"><span class="label-text font-semibold">{{ $t('logReport.keywordSearch') }}</span>
+          </div>
           <input type="text" v-model="filters.keyword" :placeholder="$t('logReport.searchPlaceholder')"
             class="input input-bordered input-sm w-full h-[3rem]" />
         </label>
@@ -131,9 +136,14 @@ import { usePermissionStore } from '@/stores/usePermissionStore';
 import TableData from '@/components/TableData.vue';
 import NoAccess from '@/components/NoAccess.vue';
 import SearchableDropdown from '@/components/SearchableDropdown.vue';
+import { useErrorHandler } from '@/composables/useErrorHandler';
+const { handleError } = useErrorHandler();
+import { useFormatter } from '@/composables/useFormatter';
+const { formatTime } = useFormatter();
 
 import { VueDatePicker } from '@vuepic/vue-datepicker';
-
+import { useThemeStore } from '@/stores/useThemeStore';
+const themeStore = useThemeStore();
 const { t } = useI18n();
 
 const { data: fetchResult, isLoading, error: fetchError, execute: executeFetch } = useFetch();
@@ -202,14 +212,6 @@ const deviceColumns = computed(() => [
 ]);
 
 const currentColumns = computed(() => activeTab.value === 'system' ? systemColumns.value : deviceColumns.value);
-
-const formatTime = (ts) => {
-  if (!ts) return '-';
-  return new Date(ts).toLocaleString('en-US', {
-    month: 'short', day: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-  });
-};
 
 const switchTab = async (tabName) => {
   if (activeTab.value === tabName) return;
@@ -283,7 +285,7 @@ const exportData = async (format) => {
     // Rely on generic export success message if preferred, or hardcode success text here
     toast.success(`${format.toUpperCase()} file downloaded successfully!`);
   } else {
-    toast.error(exportError.value?.message || `Failed to export ${format} file`);
+    toast.error(handleError(exportError , 'device.messages.exportFailed', { format: format.toUpperCase() }));
   }
 };
 

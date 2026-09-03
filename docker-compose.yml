@@ -14,8 +14,6 @@ services:
       - .env
     environment:
       - DB_HOST=db
-      - SCHEDULE_ENGINE_URL=http://server-schedule-engine:8081
-      - DEVICE_GATEWAY_URL=http://server-device-gateway:8091
       - LOG_API_DIR=/app/logs
     volumes:
       # host_machine_folder : container_folder
@@ -39,7 +37,6 @@ services:
       - .env
     environment:
       - DB_HOST=db
-      - DEVICE_GATEWAY_URL=http://server-device-gateway:8091
       - LOG_SCHEDULE_ENGINE_DIR=/app/logs
     volumes:
       # host_machine_folder : container_folder
@@ -65,10 +62,9 @@ services:
       - .env
     environment:
       - DB_HOST=db
-      - MQTT_BROKER_URL=tcp://mqtt-broker:1883
       - LOG_DEVICE_GATEWAY_DIR=/app/logs
     volumes:
-      - ./backend/local_logs/gateway:/app/logs
+      - ./backend/local_logs/devicegateway:/app/logs
     logging:
       driver: "json-file"
       options:
@@ -89,7 +85,7 @@ services:
         max-size: "2m"
         max-file: "2"
   mqtt-broker:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto:2.1-alpine
     ports:
       # Expose MQTT standard port to the outside world for devices
       - "1883:1883" 
@@ -105,7 +101,7 @@ services:
         max-size: "10m"
         max-file: "3"
   nodered:
-    image: nodered/node-red:latest
+    image: nodered/node-red:5.0-debian
     ports:
       - "1880:1880"
     environment:
@@ -126,12 +122,11 @@ services:
         max-file: "3"
   garage:
     image: dxflrs/garage:v2.3.0
-    ports:
-      - "3900:3900" # S3 API port (Your Go app talks to this)
-      - "3902:3902" # Web routing port (For public image access)
     volumes:
       - ./garage_config:/etc/garage
       - garage_data:/var/lib/garage
+    ports:
+      - "3900:3900"
     environment:
       - GARAGE_CONFIG_FILE=/etc/garage/garage.toml
     restart: unless-stopped
@@ -141,7 +136,7 @@ services:
         max-size: "10m"
         max-file: "3"
   db:
-    image: timescale/timescaledb:latest-pg18
+    image: timescale/timescaledb:2.29.2-pg18
     environment:
       POSTGRES_USER: "${DB_USER:?error: DB_USER not set}"
       POSTGRES_PASSWORD: "${DB_PASSWORD:?error: DB_PASSWORD not set}"
