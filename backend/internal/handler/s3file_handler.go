@@ -48,7 +48,7 @@ func (h *S3File) UploadImageHandler(w http.ResponseWriter, r *http.Request) {
 	// 2. Parse form file
 	file, _, err := r.FormFile("image")
 	if err != nil {
-		res.Message = "Invalid file or file size exceeds 5MB"
+		res.Message = "Invalid file or file size exceeds 10MB"
 		respondJson(w, http.StatusBadRequest, &res)
 		return
 	}
